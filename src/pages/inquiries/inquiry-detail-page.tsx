@@ -4,17 +4,18 @@ import { ArrowRight, Building2, CalendarClock, Package } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
-import { Card, CardTitle, SectionHeading } from '@/components/ui/card'
+import { Card, CardTitle } from '@/components/ui/card'
 import { InquiryStatusBadge, SyncStatusBadge } from '@/components/ui/status-badge'
 import { Timeline, type TimelineStep } from '@/components/ui/timeline'
 import { useToast } from '@/components/ui/toast'
+import { AuditTrail } from '@/features/audit/audit-trail'
+import { auditKeys } from '@/features/audit/audit-keys'
 import { useAuth } from '@/features/auth/auth-context'
 import { useActivation } from '@/hooks/use-activation'
 import { inquiryKeys } from '@/hooks/use-inquiries'
 import { outboxKey } from '@/hooks/use-outbox'
 import { getCustomerById } from '@/repositories/customer-repository'
 import { getInquiryById, transitionInquiry } from '@/repositories/inquiry-repository'
-import { listAuditTrailForEntity } from '@/repositories/audit-repository'
 import type { Inquiry, InquiryStatus } from '@/types/inquiry'
 
 const STAGES: Array<{ status: InquiryStatus; label: string }> = [
@@ -80,12 +81,6 @@ export function InquiryDetailPage() {
     enabled: Boolean(inquiry?.customerId),
   })
 
-  const { data: audit = [] } = useQuery({
-    queryKey: ['audit', id],
-    queryFn: () => listAuditTrailForEntity(id),
-    enabled: Boolean(id),
-  })
-
   const transition = useMutation({
     mutationFn: (to: InquiryStatus) => {
       if (!user) throw new Error('Not signed in')
@@ -96,7 +91,7 @@ export function InquiryDetailPage() {
       if (!navigator.onLine) await markStep('worked_offline')
       await queryClient.invalidateQueries({ queryKey: inquiryKeys.detail(id) })
       await queryClient.invalidateQueries({ queryKey: inquiryKeys.all })
-      await queryClient.invalidateQueries({ queryKey: ['audit', id] })
+      await queryClient.invalidateQueries({ queryKey: auditKeys.all })
       await queryClient.invalidateQueries({ queryKey: outboxKey })
       notify({ tone: 'success', message: `Moved to ${updated.status.replaceAll('_', ' ')}` })
     },
@@ -243,21 +238,7 @@ export function InquiryDetailPage() {
         </div>
       </div>
 
-      {audit.length > 0 ? (
-        <section aria-label="History">
-          <SectionHeading className="mb-2">History</SectionHeading>
-          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
-            {audit.map((entry) => (
-              <li key={entry.id} className="flex items-baseline gap-3 px-4 py-2.5 text-sm">
-                <span className="min-w-0 flex-1 text-ink">{entry.summary}</span>
-                <span className="shrink-0 text-xs text-faint">
-                  {format(new Date(entry.createdAt), 'PP p')}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <AuditTrail entityId={inquiry.id} title="History" />
     </div>
   )
 }

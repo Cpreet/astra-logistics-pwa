@@ -12,6 +12,7 @@ import { ListSkeleton } from '@/components/ui/skeleton'
 import { buildAttentionQueue } from '@/domain/attention'
 import { formatRoleLabel } from '@/domain/permissions'
 import { getRoleHome } from '@/domain/role-home'
+import { auditKeys } from '@/features/audit/audit-keys'
 import { AttentionQueue } from '@/features/dashboard/attention-queue'
 import { ActivationChecklist } from '@/features/onboarding/activation-checklist'
 import { useAuth } from '@/features/auth/auth-context'
@@ -33,7 +34,7 @@ export function DashboardPage() {
   const { data: inquiries = [], isLoading: loadingInquiries } = useInquiries()
   const { data: outbox = [] } = useOutbox()
   const { data: activity = [] } = useQuery({
-    queryKey: ['audit', 'recent'],
+    queryKey: auditKeys.recent,
     queryFn: () => listAuditTrail(6),
   })
 
