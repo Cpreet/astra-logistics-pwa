@@ -1,112 +1,170 @@
-import { format, parseISO } from 'date-fns'
-import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { formatDistanceToNowStrict } from 'date-fns'
+import { ArrowRight, Plus } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { buttonClasses } from '@/components/ui/button'
+import { SectionHeading } from '@/components/ui/card'
+import { InquiryStatusBadge } from '@/components/ui/status-badge'
+import { ListSkeleton } from '@/components/ui/skeleton'
+import { buildAttentionQueue } from '@/domain/attention'
+import { getRoleHome } from '@/domain/role-home'
+import { AttentionQueue } from '@/features/dashboard/attention-queue'
+import { ActivationChecklist } from '@/features/onboarding/activation-checklist'
 import { useAuth } from '@/features/auth/auth-context'
+import { useActivation } from '@/hooks/use-activation'
 import { useCustomers } from '@/hooks/use-customers'
 import { useInquiries } from '@/hooks/use-inquiries'
 import { useOnlineStatus } from '@/hooks/use-online-status'
-import { countPendingOutbox } from '@/repositories/sync-outbox-repository'
-import { useQuery } from '@tanstack/react-query'
-import { FileText, Users, Wifi, CloudUpload } from 'lucide-react'
+import { useOutbox } from '@/hooks/use-outbox'
+import { listAuditTrail } from '@/repositories/audit-repository'
+import { cn } from '@/utils/cn'
+
+const OPEN_STATUSES = new Set(['new', 'qualified', 'quotation_in_progress', 'quoted'])
 
 export function DashboardPage() {
   const { user } = useAuth()
   const online = useOnlineStatus()
-  const { data: customers = [] } = useCustomers()
-  const { data: inquiries = [] } = useInquiries()
-  const { data: pendingSync = 0 } = useQuery({
-    queryKey: ['sync', 'pending'],
-    queryFn: countPendingOutbox,
-    refetchInterval: 10_000,
+  const { markStep } = useActivation()
+  const { data: customers = [], isLoading: loadingCustomers } = useCustomers()
+  const { data: inquiries = [], isLoading: loadingInquiries } = useInquiries()
+  const { data: outbox = [] } = useOutbox()
+  const { data: activity = [] } = useQuery({
+    queryKey: ['audit', 'recent'],
+    queryFn: () => listAuditTrail(6),
   })
 
-  const openInquiries = useMemo(
-    () => inquiries.filter((i) => !['converted', 'lost', 'cancelled'].includes(i.status)).length,
-    [inquiries],
+  const roleHome = user ? getRoleHome(user.role) : null
+
+  const attention = useMemo(
+    () => buildAttentionQueue({ inquiries, customers, outbox }),
+    [inquiries, customers, outbox],
   )
 
-  const recentInquiries = inquiries.slice(0, 5)
+  const pendingSync = outbox.filter((entry) => entry.status === 'pending').length
+
+  useEffect(() => {
+    if (!online && pendingSync > 0) {
+      void markStep('worked_offline')
+    }
+  }, [online, pendingSync, markStep])
+
+  const stats = useMemo(() => {
+    const open = inquiries.filter((inquiry) => OPEN_STATUSES.has(inquiry.status))
+    const quoted = inquiries.filter((inquiry) => inquiry.status === 'quoted')
+    const won = inquiries.filter((inquiry) => inquiry.status === 'converted')
+    return [
+      { label: 'Open lanes', value: open.length, to: '/inquiries?status=open' },
+      { label: 'Awaiting decision', value: quoted.length, to: '/inquiries?status=quoted' },
+      { label: 'Won', value: won.length, to: '/inquiries?status=converted' },
+      { label: 'Customers', value: customers.length, to: '/customers' },
+    ]
+  }, [inquiries, customers])
+
+  const recentInquiries = inquiries.slice(0, 4)
+  const loading = loadingCustomers || loadingInquiries
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <PageHeader
-        title={`Welcome${user ? `, ${user.name.split(' ')[0]}` : ''}`}
-        description="Mobile-ready operations hub. Data is stored locally first and syncs when connectivity returns."
+        eyebrow={roleHome?.headline}
+        title={user ? `Good to see you, ${user.name.split(' ')[0]}` : 'Overview'}
+        description={roleHome?.focus}
+        actions={
+          roleHome?.primaryAction ? (
+            <Link to={roleHome.primaryAction.to} className={buttonClasses('primary', 'md')}>
+              <Plus className="size-4" aria-hidden />
+              {roleHome.primaryAction.label}
+            </Link>
+          ) : null
+        }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <Card className="p-4">
-          <Users className="mb-2 size-5 text-sky-400" />
-          <p className="text-2xl font-semibold text-white">{customers.length}</p>
-          <CardDescription>Customers</CardDescription>
-        </Card>
-        <Card className="p-4">
-          <FileText className="mb-2 size-5 text-violet-400" />
-          <p className="text-2xl font-semibold text-white">{openInquiries}</p>
-          <CardDescription>Open inquiries</CardDescription>
-        </Card>
-        <Card className="p-4">
-          {online ? (
-            <Wifi className="mb-2 size-5 text-emerald-400" />
-          ) : (
-            <CloudUpload className="mb-2 size-5 text-amber-400" />
-          )}
-          <p className="text-2xl font-semibold text-white">{online ? 'Online' : 'Offline'}</p>
-          <CardDescription>{pendingSync} pending sync</CardDescription>
-        </Card>
-        <Card className="col-span-2 p-4 sm:col-span-1">
-          <CardTitle className="text-base">Quick actions</CardTitle>
-          <div className="mt-3 flex flex-col gap-2">
-            <Link
-              to="/inquiries/new"
-              className="min-h-11 rounded-lg bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
-            >
-              New inquiry
-            </Link>
-            <Link
-              to="/customers/new"
-              className="min-h-11 rounded-lg border border-slate-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-slate-900"
-            >
-              Add customer
-            </Link>
-          </div>
-        </Card>
-      </div>
+      {loading ? <ListSkeleton rows={3} /> : <AttentionQueue items={attention} />}
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-200">Recent inquiries</h3>
-          <Link to="/inquiries" className="text-sm text-sky-400 hover:underline">
+      <ActivationChecklist />
+
+      <section aria-label="Pipeline">
+        <SectionHeading className="mb-2">Pipeline</SectionHeading>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {stats.map((stat) => (
+            <Link
+              key={stat.label}
+              to={stat.to}
+              className="rounded-card border border-line bg-surface p-3 transition-colors hover:border-line-strong"
+            >
+              <p className="tabular text-2xl font-semibold tracking-tight text-ink">{stat.value}</p>
+              <p className="mt-0.5 text-xs text-muted">{stat.label}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="Recent inquiries">
+        <div className="mb-2 flex items-baseline justify-between">
+          <SectionHeading>Recent inquiries</SectionHeading>
+          <Link
+            to="/inquiries"
+            className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+          >
             View all
+            <ArrowRight className="size-3" aria-hidden />
           </Link>
         </div>
-        <ul className="space-y-2">
-          {recentInquiries.length === 0 ? (
-            <li className="text-sm text-slate-500">No inquiries yet</li>
-          ) : (
-            recentInquiries.map((inquiry) => (
+        {recentInquiries.length === 0 ? (
+          <p className="rounded-card border border-dashed border-line-strong bg-surface p-4 text-sm text-muted">
+            No inquiries yet.{' '}
+            <Link to="/inquiries/new" className="font-medium text-brand hover:underline">
+              Capture your first lane
+            </Link>
+            .
+          </p>
+        ) : (
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+            {recentInquiries.map((inquiry) => (
               <li key={inquiry.id}>
                 <Link
                   to={`/inquiries/${inquiry.id}`}
-                  className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 active:bg-slate-900"
+                  className="flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-raised"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-100">{inquiry.inquiryNumber}</p>
-                    <p className="truncate text-xs text-slate-500">
-                      {inquiry.origin.code} → {inquiry.destination.code} ·{' '}
-                      {format(parseISO(inquiry.createdAt), 'MMM d')}
-                    </p>
-                  </div>
-                  <Badge variant="info">{inquiry.status.replaceAll('_', ' ')}</Badge>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="tabular text-sm font-medium text-ink">
+                        {inquiry.inquiryNumber}
+                      </span>
+                      <span className="truncate text-sm text-muted">
+                        {inquiry.origin.code} → {inquiry.destination.code}
+                      </span>
+                    </span>
+                    <span className="block truncate text-xs text-faint">
+                      Updated {formatDistanceToNowStrict(new Date(inquiry.updatedAt))} ago
+                    </span>
+                  </span>
+                  <InquiryStatusBadge status={inquiry.status} />
                 </Link>
               </li>
-            ))
-          )}
-        </ul>
+            ))}
+          </ul>
+        )}
       </section>
+
+      {activity.length > 0 ? (
+        <section aria-label="Activity">
+          <SectionHeading className="mb-2">Activity</SectionHeading>
+          <ul className="space-y-1.5">
+            {activity.map((entry) => (
+              <li key={entry.id} className="flex items-baseline gap-2 text-xs">
+                <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full bg-line-strong')} />
+                <span className="text-ink">{entry.summary}</span>
+                <span className="ml-auto shrink-0 text-faint">
+                  {formatDistanceToNowStrict(new Date(entry.createdAt))} ago
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   )
 }
