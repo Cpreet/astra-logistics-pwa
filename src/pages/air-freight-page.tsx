@@ -1,33 +1,43 @@
 import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { useInquiries } from '@/hooks/use-inquiries'
+import { FileText, Users, Plane } from 'lucide-react'
 
 export function AirFreightPage() {
+  const { data: inquiries = [] } = useInquiries()
+  const airInquiries = inquiries.filter((i) => i.transportMode === 'air')
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold text-white">Air freight management</h2>
-          <p className="mt-2 text-slate-400">
-            Module placeholder — inquiries, quotations, bookings, and shipment lifecycle will
-            connect here.
-          </p>
-        </div>
-        <Button variant="secondary" disabled title="Available in a future iteration">
-          New inquiry
-        </Button>
+      <PageHeader
+        title="Air freight"
+        description="Commercial air workflow — inquiries today, quotations and bookings next."
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Link to="/inquiries" className="block rounded-xl border border-slate-800 bg-slate-900/50 p-4 active:bg-slate-900">
+          <Plane className="mb-2 size-6 text-sky-400" />
+          <CardTitle className="text-base">Inquiries</CardTitle>
+          <CardDescription>{airInquiries.length} air records</CardDescription>
+        </Link>
+        <Link to="/customers" className="block rounded-xl border border-slate-800 bg-slate-900/50 p-4 active:bg-slate-900">
+          <Users className="mb-2 size-6 text-emerald-400" />
+          <CardTitle className="text-base">Customers</CardTitle>
+          <CardDescription>CRM & contacts</CardDescription>
+        </Link>
+        <Link to="/inquiries/new" className="block rounded-xl border border-slate-800 bg-slate-900/50 p-4 active:bg-slate-900">
+          <FileText className="mb-2 size-6 text-violet-400" />
+          <CardTitle className="text-base">New inquiry</CardTitle>
+          <CardDescription>Capture lane & cargo</CardDescription>
+        </Link>
       </div>
+
       <Card>
-        <CardTitle>Next implementation steps</CardTitle>
-        <CardDescription className="mt-3 space-y-2">
-          <p>Customer CRM, quotation workflow, shipment state machine, documents, and finance.</p>
-          <p>
-            See{' '}
-            <Link className="text-sky-400 underline-offset-2 hover:underline" to="/">
-              dashboard
-            </Link>{' '}
-            and repository docs under <code className="text-slate-300">docs/</code>.
-          </p>
+        <CardTitle>Coming next</CardTitle>
+        <CardDescription className="mt-2">
+          Quotations with margin approval, bookings, shipment state machine, documents, and finance —
+          all offline-first with the same mobile shell.
         </CardDescription>
       </Card>
     </div>

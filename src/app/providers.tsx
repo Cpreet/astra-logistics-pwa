@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { bootstrapLocalDatabase } from '@/db/bootstrap'
 import { router } from '@/app/router'
+import { AuthProvider } from '@/features/auth/auth-context'
 import { startSyncEngine } from '@/sync/sync-engine'
 
 const queryClient = new QueryClient({
@@ -58,7 +59,9 @@ export function AppProviders() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

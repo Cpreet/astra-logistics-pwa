@@ -35,7 +35,11 @@ This repository is under active development. The current milestone is a **scaffo
 
 ## Authentication (planned)
 
-Production authentication is **not** implemented. A future phase will add **demo authentication** with seeded users and role-based guards, clearly labelled as non-production in this README.
+**Demo authentication** is enabled: choose a seeded user on `/login`. Sessions persist in IndexedDB on this device only — not production security. Role-based route guards gate customers and inquiries.
+
+## Mobile & offline
+
+The UI uses a **mobile-first** layout: bottom navigation on small screens, touch-friendly controls (44px targets), safe-area padding, and local-first reads via TanStack Query + Dexie.
 
 ## Deploy (Netlify + GitHub)
 
