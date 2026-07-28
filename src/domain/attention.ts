@@ -30,6 +30,15 @@ interface AttentionInput {
 
 const OPEN_INQUIRY_STATUSES = new Set(['new', 'qualified', 'quotation_in_progress'])
 
+function pluralDays(count: number): string {
+  return count === 1 ? '1 day' : `${count} days`
+}
+
+function stageLabel(status: string): string {
+  const words = status.replaceAll('_', ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 /**
  * Exception-first: surface what threatens service or margin, not generic counts.
  */
@@ -89,7 +98,7 @@ export function buildAttentionQueue({
           severity: 'critical',
           code: 'PICKUP_DATE_PASSED',
           title: `${inquiry.inquiryNumber} pickup date has passed`,
-          detail: `Requested pickup was ${Math.abs(daysToPickup)} day(s) ago and the inquiry is still ${inquiry.status.replaceAll('_', ' ')}.`,
+          detail: `Requested pickup was ${pluralDays(Math.abs(daysToPickup))} ago and the lane is still at ${stageLabel(inquiry.status)}.`,
           to: `/inquiries/${inquiry.id}`,
           actionLabel: 'Open inquiry',
         })
@@ -100,7 +109,10 @@ export function buildAttentionQueue({
           id: `pickup-soon-${inquiry.id}`,
           severity: 'high',
           code: 'PICKUP_IMMINENT',
-          title: `${inquiry.inquiryNumber} ships in ${daysToPickup} day(s)`,
+          title:
+            daysToPickup === 0
+              ? `${inquiry.inquiryNumber} ships today`
+              : `${inquiry.inquiryNumber} ships in ${pluralDays(daysToPickup)}`,
           detail: 'Quote this lane now to protect the pickup window.',
           to: `/inquiries/${inquiry.id}`,
           actionLabel: 'Quote lane',
@@ -116,7 +128,7 @@ export function buildAttentionQueue({
         severity: 'high',
         code: 'QUOTE_STALLED',
         title: `${inquiry.inquiryNumber} pricing stalled`,
-        detail: `No pricing update for ${Math.floor(ageHours / 24)} day(s).`,
+        detail: `No pricing update for ${pluralDays(Math.floor(ageHours / 24))}.`,
         to: `/inquiries/${inquiry.id}`,
         actionLabel: 'Resume pricing',
       })
@@ -126,7 +138,7 @@ export function buildAttentionQueue({
         severity: 'medium',
         code: 'INQUIRY_IDLE',
         title: `${inquiry.inquiryNumber} has had no activity`,
-        detail: `Idle for ${Math.floor(ageHours / 24)} day(s) in ${inquiry.status.replaceAll('_', ' ')}.`,
+        detail: `Idle for ${pluralDays(Math.floor(ageHours / 24))} at ${stageLabel(inquiry.status)}.`,
         to: `/inquiries/${inquiry.id}`,
         actionLabel: 'Follow up',
       })

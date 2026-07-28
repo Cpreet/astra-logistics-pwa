@@ -53,9 +53,9 @@ export function AttentionQueue({ items }: { items: AttentionItem[] }) {
               >
                 <span className={cn('w-1 shrink-0', severityBar[item.severity])} aria-hidden />
                 <span className="min-w-0 flex-1 py-3 pr-3">
-                  <span className="flex flex-wrap items-center gap-2">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Badge tone={severityTone[item.severity]}>{severityLabel[item.severity]}</Badge>
-                    <span className="truncate text-sm font-medium text-ink">{item.title}</span>
+                    <span className="text-sm font-medium text-ink">{item.title}</span>
                   </span>
                   <span className="mt-1 block text-xs leading-relaxed text-muted">
                     {item.detail}

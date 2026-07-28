@@ -1,26 +1,34 @@
 import { Check, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Progress } from '@/components/ui/progress'
 import { SectionHeading } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import type { Permission } from '@/domain/permissions'
+import { useAuth } from '@/features/auth/auth-context'
 import { useActivation } from '@/hooks/use-activation'
-import { ACTIVATION_STEPS, activationProgress, type ActivationStep } from '@/services/activation-service'
+import { ACTIVATION_STEPS, type ActivationStep } from '@/services/activation-service'
 import { cn } from '@/utils/cn'
 
-const STEP_COPY: Record<ActivationStep, { label: string; hint: string; to?: string }> = {
+const STEP_COPY: Record<
+  ActivationStep,
+  { label: string; hint: string; to?: string; requires?: Permission }
+> = {
   created_customer: {
     label: 'Add a customer',
-    hint: 'Two fields is enough to start',
+    hint: 'Four fields is enough to start',
     to: '/customers/new',
+    requires: 'customers.write',
   },
   created_inquiry: {
     label: 'Capture an inquiry',
     hint: 'Pick a lane template to skip typing',
     to: '/inquiries/new',
+    requires: 'inquiries.write',
   },
   advanced_inquiry: {
     label: 'Move it through the workflow',
-    hint: 'Qualify, then mark it quoted',
+    hint: 'Qualify the lane, then mark it quoted',
     to: '/inquiries',
+    requires: 'inquiries.write',
   },
   worked_offline: {
     label: 'Save something offline',
@@ -30,9 +38,20 @@ const STEP_COPY: Record<ActivationStep, { label: string; hint: string; to?: stri
 
 export function ActivationChecklist() {
   const { steps, dismissed, loading, dismiss } = useActivation()
-  const progress = activationProgress(steps)
+  const { can } = useAuth()
 
-  if (loading || dismissed || progress.done) return null
+  // Only suggest work this role can actually perform.
+  const visibleSteps = ACTIVATION_STEPS.filter((step) => {
+    const requires = STEP_COPY[step].requires
+    return !requires || can(requires)
+  })
+
+  const actionable = visibleSteps.filter((step) => STEP_COPY[step].requires)
+  const completed = visibleSteps.filter((step) => Boolean(steps[step])).length
+
+  if (loading || dismissed || actionable.length === 0 || completed === visibleSteps.length) {
+    return null
+  }
 
   return (
     <section
@@ -43,13 +62,13 @@ export function ActivationChecklist() {
         <div>
           <SectionHeading>Get productive</SectionHeading>
           <p className="mt-1 text-sm text-muted">
-            {progress.completed} of {progress.total} done — about two minutes.
+            {completed} of {visibleSteps.length} done — about two minutes.
           </p>
         </div>
         <button
           type="button"
           onClick={() => dismiss()}
-          className="rounded-md p-1 text-faint hover:bg-raised hover:text-ink"
+          className="rounded-md p-1 text-faint transition-colors hover:bg-raised hover:text-ink"
           aria-label="Dismiss getting started"
         >
           <X className="size-4" />
@@ -57,11 +76,11 @@ export function ActivationChecklist() {
       </div>
 
       <div className="mt-3">
-        <Progress value={progress.completed} max={progress.total} label="Activation progress" />
+        <Progress value={completed} max={visibleSteps.length} label="Activation progress" />
       </div>
 
       <ul className="mt-4 space-y-1">
-        {ACTIVATION_STEPS.map((step) => {
+        {visibleSteps.map((step) => {
           const done = Boolean(steps[step])
           const copy = STEP_COPY[step]
           const content = (

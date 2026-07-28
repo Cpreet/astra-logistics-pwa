@@ -30,7 +30,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'quotations.write',
   ],
   pricing_executive: ['customers.read', 'inquiries.read', 'quotations.read', 'quotations.write'],
-  operations_executive: ['customers.read', 'inquiries.read', 'quotations.read'],
+  operations_executive: ['customers.read', 'inquiries.read', 'inquiries.write', 'quotations.read'],
   documentation_executive: ['customers.read', 'inquiries.read'],
   compliance_officer: ['customers.read', 'inquiries.read'],
   warehouse_executive: ['customers.read', 'inquiries.read'],

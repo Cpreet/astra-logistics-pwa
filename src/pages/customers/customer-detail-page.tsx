@@ -5,9 +5,13 @@ import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button, buttonClasses } from '@/components/ui/button'
 import { Card, CardTitle, SectionHeading } from '@/components/ui/card'
-import { CustomerStatusBadge, SyncStatusBadge } from '@/components/ui/status-badge'
 import { Badge } from '@/components/ui/badge'
-import { InquiryStatusBadge } from '@/components/ui/status-badge'
+import {
+  CustomerStatusBadge,
+  humanize,
+  InquiryStatusBadge,
+  SyncStatusBadge,
+} from '@/components/ui/status-badge'
 import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/features/auth/auth-context'
 import { customerKeys } from '@/hooks/use-customers'
@@ -75,7 +79,9 @@ export function CustomerDetailPage() {
         eyebrow={customer.customerCode}
         title={customer.legalName}
         description={
-          customer.tradingName ? `Trading as ${customer.tradingName}` : `${customer.customerType}`
+          customer.tradingName
+            ? `${humanize(customer.customerType)} · trading as ${customer.tradingName}`
+            : humanize(customer.customerType)
         }
         backTo="/customers"
         backLabel="Customers"
@@ -152,8 +158,12 @@ export function CustomerDetailPage() {
         <Card className="sm:col-span-2">
           <CardTitle className="mb-2 text-sm">Billing address</CardTitle>
           <address className="text-sm not-italic leading-relaxed text-muted">
-            {customer.billingAddress.line1}
-            <br />
+            {customer.billingAddress.line1 !== '—' ? (
+              <>
+                {customer.billingAddress.line1}
+                <br />
+              </>
+            ) : null}
             {customer.billingAddress.city}
             {customer.billingAddress.postalCode !== '—'
               ? `, ${customer.billingAddress.postalCode}`

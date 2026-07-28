@@ -25,6 +25,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Kbd } from '@/components/ui/kbd'
+import { humanize } from '@/components/ui/status-badge'
 import { useToast } from '@/components/ui/toast'
 import { reloadDemoData } from '@/db/seed'
 import { useAuth } from '@/features/auth/auth-context'
@@ -149,7 +150,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
         id: `inquiry-${inquiry.id}`,
         group: 'Inquiries',
         label: `${inquiry.inquiryNumber} · ${inquiry.origin.code} → ${inquiry.destination.code}`,
-        hint: inquiry.status.replaceAll('_', ' '),
+        hint: humanize(inquiry.status),
         icon: FileText,
         run: go(`/inquiries/${inquiry.id}`),
       })
@@ -317,9 +318,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                         {item.label}
                       </span>
                       {item.hint ? (
-                        <span className="block truncate text-xs capitalize text-muted">
-                          {item.hint}
-                        </span>
+                        <span className="block truncate text-xs text-muted">{item.hint}</span>
                       ) : null}
                     </span>
                     {active ? (

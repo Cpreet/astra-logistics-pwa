@@ -33,12 +33,23 @@ export function humanize(value: string): string {
   return value.replaceAll('_', ' ').replace(/^\w/, (c) => c.toUpperCase())
 }
 
+/** Operators scan lists quickly — keep pipeline labels short and industry-familiar. */
+const inquiryLabels: Record<InquiryStatus, string> = {
+  new: 'New',
+  qualified: 'Qualified',
+  quotation_in_progress: 'Pricing',
+  quoted: 'Quoted',
+  converted: 'Won',
+  lost: 'Lost',
+  cancelled: 'Cancelled',
+}
+
 export function InquiryStatusBadge({ status }: { status: InquiryStatus }) {
   const tone = inquiryTones[status]
   return (
     <Badge tone={tone}>
       <Dot tone={tone} />
-      {humanize(status)}
+      {inquiryLabels[status]}
     </Badge>
   )
 }
