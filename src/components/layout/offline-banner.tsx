@@ -1,34 +1,38 @@
-import { WifiOff, CloudUpload } from 'lucide-react'
+import { CloudUpload, WifiOff } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useOnlineStatus, usePendingSyncCount } from '@/hooks/use-online-status'
 
 export function OfflineBanner() {
   const online = useOnlineStatus()
   const pending = usePendingSyncCount()
 
-  if (online && pending === 0) {
-    return null
-  }
+  if (online && pending === 0) return null
 
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center justify-center gap-2 border-b border-amber-900/50 bg-amber-950/80 px-4 py-2 text-sm text-amber-100"
+      className={
+        online
+          ? 'flex items-center justify-center gap-2 bg-info-soft px-4 py-1.5 text-xs font-medium text-info'
+          : 'flex items-center justify-center gap-2 bg-warning-soft px-4 py-1.5 text-xs font-medium text-warning'
+      }
     >
-      {!online ? (
+      {online ? (
         <>
-          <WifiOff className="size-4 shrink-0" aria-hidden />
-          <span>Working offline — changes are saved locally.</span>
-        </>
-      ) : null}
-      {pending > 0 ? (
-        <>
-          <CloudUpload className="size-4 shrink-0" aria-hidden />
+          <CloudUpload className="size-3.5 shrink-0" aria-hidden />
           <span>
-            {pending} change{pending === 1 ? '' : 's'} waiting to sync (simulated transport in
-            MVP).
+            {pending} change{pending === 1 ? '' : 's'} queued for sync
           </span>
+          <Link to="/sync" className="underline underline-offset-2">
+            View
+          </Link>
         </>
-      ) : null}
+      ) : (
+        <>
+          <WifiOff className="size-3.5 shrink-0" aria-hidden />
+          <span>Offline — changes are saved on this device</span>
+        </>
+      )}
     </div>
   )
 }

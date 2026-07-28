@@ -104,37 +104,39 @@ A feature folder owns its components, schemas and hooks. Anything used by two fe
 
 ## 4. Roles and permissions
 
-Ten roles: `administrator`, `sales`, `pricing`, `operations`, `documentation`, `compliance`, `warehouse`, `finance`, `manager`, `customer`.
+Ten roles, as implemented in `src/types/user.ts`: `administrator`, `sales_executive`, `pricing_executive`, `operations_executive`, `documentation_executive`, `compliance_officer`, `warehouse_executive`, `finance_executive`, `manager`, `customer`.
 
 **Authentication is demo authentication.** Seeded users, no password verification, session in local storage. It must be labelled as such in the UI login screen and in the README. It must never be described as production-grade.
 
 Permissions are declared as capability strings checked through one guard API, so real auth later changes only the identity source:
 
 ```ts
-can(user, 'shipment:transition', { shipment })   // capability + optional subject
+hasPermission(user.role, 'shipments.transition')      // src/domain/permissions.ts
 ```
 
-| Capability | Roles |
+Permissions use **dot notation** (`customers.read`, `inquiries.write`) — the convention already shipped in `src/domain/permissions.ts`. The table below names the target set; extend `Permission` as each feature lands.
+
+| Permission | Roles |
 |-----------|-------|
-| `customer:*` | administrator, sales (write), all internal (read) |
-| `inquiry:*` | administrator, sales; manager read |
-| `quotation:write` | administrator, sales, pricing |
-| `quotation:approve_margin` | administrator, pricing, manager |
-| `booking:*` | administrator, sales, operations |
-| `shipment:create` / `shipment:transition` | administrator, operations |
-| `document:upload` | administrator, documentation, operations, warehouse, customer (own) |
-| `document:verify` | administrator, documentation |
-| `compliance:review` / `compliance:override` | administrator, compliance |
-| `compliance:release_hold` | administrator, compliance, manager |
-| `customs:file` | administrator, documentation, compliance |
-| `carrier:book` | administrator, operations |
-| `warehouse:receipt` | administrator, warehouse, operations |
-| `finance:invoice` / `finance:payment` | administrator, finance |
-| `finance:close_job` / `finance:reopen_job` | administrator, finance |
-| `incident:manage` | administrator, manager, plus the routed role |
-| `report:view` | administrator, manager, finance |
-| `admin:users` / `admin:settings` / `sync:resolve_conflict` | administrator |
-| `portal:*` | customer, scoped to own `customerId` |
+| `customers.read` / `customers.write` | administrator, sales_executive (write); all internal roles read |
+| `inquiries.read` / `inquiries.write` | administrator, sales_executive; manager read |
+| `quotations.read` / `quotations.write` | administrator, sales_executive, pricing_executive |
+| `quotations.approve_margin` | administrator, pricing_executive, manager |
+| `bookings.write` | administrator, sales_executive, operations_executive |
+| `shipments.create` / `shipments.transition` | administrator, operations_executive |
+| `documents.upload` | administrator, documentation_executive, operations_executive, warehouse_executive, customer (own) |
+| `documents.verify` | administrator, documentation_executive |
+| `compliance.review` / `compliance.override` | administrator, compliance_officer |
+| `compliance.release_hold` | administrator, compliance_officer, manager |
+| `customs.file` | administrator, documentation_executive, compliance_officer |
+| `carriers.book` | administrator, operations_executive |
+| `warehouse.receipt` | administrator, warehouse_executive, operations_executive |
+| `finance.invoice` / `finance.payment` | administrator, finance_executive |
+| `finance.close_job` / `finance.reopen_job` | administrator, finance_executive |
+| `incidents.manage` | administrator, manager, plus the routed role |
+| `reports.view` | administrator, manager, finance_executive |
+| `settings.manage` / `sync.resolve` | administrator |
+| `portal.*` | customer, scoped to own `customerId` |
 
 **Customer scoping is enforced in the repository layer**, not in the UI, and is covered by tests that attempt cross-customer reads.
 

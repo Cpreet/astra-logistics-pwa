@@ -2,9 +2,9 @@
 
 **Read this first.** It states exactly where the project is, what has been verified, what to do next, and the rules every agent works under.
 
-- **Last verified:** 28 July 2026 against commit `4577e05`
+- **Last verified:** 28 July 2026 against `main` at `d8bf819`
 - **Branch:** `claude/astra-logistics-erp-setup-x4pt7p` (all work goes here; never push elsewhere without explicit permission)
-- **Phase:** 0 complete → **Phase 1 not started**
+- **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed) · Phase 2 started (customers, inquiries)
 
 ---
 
@@ -19,6 +19,7 @@
 | How a flow must behave for a user, offline included | [`user-flows.md`](./user-flows.md) |
 | Every state machine and its guards | [`state-machines.md`](./state-machines.md) |
 | Why a design decision exists (`D-xx`) | [`market-research.md`](./market-research.md) |
+| Why the UI and onboarding look the way they do | [`ux-principles.md`](./ux-principles.md) |
 | Sync internals | [`offline-sync.md`](./offline-sync.md) |
 | Entity overview (companion to `spec.md` §5) | [`domain-model.md`](./domain-model.md) |
 | Phase-level plan and architecture diagram | [`implementation-plan.md`](./implementation-plan.md) |
@@ -32,81 +33,91 @@ Precedence when documents disagree: `product-brief.md` states the requirement �
 
 ## 2. Current state — verified, not assumed
 
-Commit history on the branch:
+Recent history on `main`:
 
 ```
+d8bf819  feat: frictionless onboarding and professional operations UI (#4)
 4577e05  ci: fail Netlify workflow when repository secrets are missing (#3)
 1977d26  fix: sync package-lock.json for CI and Netlify builds (#2)
 04849ec  Scaffold ASTRA offline-first PWA (React, Vite, Dexie) (#1)
-c9fc85d  Initial commit
 ```
 
-Verified on 28 July 2026:
+Verified on 28 July 2026 after merging `d8bf819`:
 
 ```
 npm ci              → clean install, exit 0
 npm run typecheck   → exit 0
-npm test            → 1 file, 2 tests passed (vitest 4.1.10, ~1s)
-npm run test:coverage → 76% statements / 52% branches (scaffold only)
+npm run lint        → exit 0 (3 fast-refresh warnings in context files)
+npm test            → 5 files, 16 tests passed
+npm run build       → 15 precache entries, 889 KiB
 ```
 
-### What exists (~950 lines of source)
+### What exists
 
-| Area | File | State |
-|------|------|-------|
-| Dexie schema | `src/db/astra-db.ts` | **v1 with only 3 tables:** `syncOutbox`, `syncMetadata`, `appSettings`. No domain tables yet |
-| Bootstrap | `src/db/bootstrap.ts` | Device metadata + a bootstrap marker; enqueues one demo outbox entry |
-| Base types | `src/types/base.ts` | `BaseEntity`, `SyncStatus`, `SyncOutboxEntry`, `SyncMetadata` |
-| Sync | `src/sync/sync-engine.ts`, `sync-transport.ts` | Outbox drain loop, 30 s interval + `online` listener; `NoopSyncTransport` marks everything successful |
-| Repositories | `src/repositories/sync-*.ts` | Outbox and metadata only. **No generic write path, no audit, no domain repos** |
-| App | `src/app/router.tsx`, `providers.tsx` | Two routes: `/` and `/modules/air` |
-| UI | `src/layouts/app-shell.tsx`, `components/ui/*`, `components/layout/offline-banner.tsx` | Shell, nav, offline banner, `Button`, `Card` |
-| Pages | `src/pages/dashboard-page.tsx`, `air-freight-page.tsx` | Static marketing-style content. **No workflow** |
-| Hooks | `src/hooks/use-online-status.ts` | Connectivity state |
-| Utils | `src/utils/id.ts`, `time.ts` | `createId()`, `nowUtcIso()` |
-| Tests | `src/test/db-bootstrap.test.ts` | 2 tests: bootstrap idempotency and outbox enqueue |
-| Empty | `src/domain/`, `src/features/`, `src/services/` | `.gitkeep` only |
-| Build | `vite.config.ts` | React + Tailwind 4 + `vite-plugin-pwa` (autoUpdate, dev SW on), `@` → `src`, vitest jsdom |
-| CI | `.github/workflows/netlify-deploy.yml` | Builds and deploys `main` to Netlify; fails loudly if `NETLIFY_AUTH_TOKEN`/`NETLIFY_SITE_ID` are missing |
+| Area | Files | State |
+|------|-------|-------|
+| Dexie schema | `src/db/astra-db.ts` | **v2.** `syncOutbox`, `syncMetadata`, `appSettings`, `users`, `customers`, `customerContacts`, `inquiries`, `auditLogs`, `notifications` — 6 of ~36 domain tables |
+| Seed | `src/db/seed.ts` | Demo users, customers and inquiries; idempotent |
+| Demo auth | `src/features/auth/*` | `/welcome` role picker, session in IndexedDB, `RequireAuth`, `RequirePermission`. Labelled non-production in the README |
+| Permissions | `src/domain/permissions.ts` | 8 permissions × 10 roles, pure, tested |
+| Write path | `src/repositories/persist-entity.ts` | `persistCreate` / `persistUpdate` — one transaction covering table write + outbox + audit |
+| Repositories | `customer`, `inquiry`, `audit`, `notification`, `settings`, `user`, `sync-*` | The only Dexie callers |
+| Domain | `attention.ts`, `inquiry-workflow.ts`, `locations.ts`, `permissions.ts`, `role-home.ts` | Pure; attention queue and inquiry transitions are tested |
+| Services | `audit-service`, `notification-service`, `activation-service` | |
+| Pages | dashboard, customers (list/detail/form), inquiries (list/detail/form), sync, air-freight, welcome | Real workflows, not placeholders |
+| Shell | `app-header`, `app-sidebar`, `mobile-bottom-nav`, `mobile-tab-bar`, `nav-items`, `user-menu`, `quick-create-sheet` | Collapsible sidebar + mobile bottom nav |
+| UI kit | badge, button, card, empty-state, field, kbd, progress, segmented, sheet, skeleton, status-badge, timeline, toast | Light and dark themes via semantic tokens |
+| Extras | `command-palette`, `use-app-shortcuts`, `theme-context` | ⌘K palette, `g d`/`g i`/`g c`/`g a`/`g s`, `n` |
+| Sync | `sync-engine.ts`, `sync-transport.ts`, `/sync` page | Outbox drain + queue viewer; `NoopSyncTransport` only |
+| Tests | 5 files, 16 tests | bootstrap, attention, activation, inquiry-workflow, permissions |
+
+**The attention queue on the dashboard is the Workboard concept from `user-flows.md` §2** — already built, severity-ranked, with the action attached. Extend it rather than starting again.
 
 ### What does **not** exist yet
 
-Authentication, roles or guards · any domain entity table · any business logic · the state machine · money utilities · audit logging · seed data · Workboard · every feature module · React Hook Form/Zod usage · TanStack Query usage beyond the provider · route guards · tests beyond the two above.
+Shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route maps · **money utilities (no monetary arithmetic exists at all)** · OCR and every other adapter · conflict resolution · customer portal · reports · error boundary.
 
-**In short: the chassis is built, the vehicle is not.** Treat the two existing pages as placeholders to be replaced, not as patterns to copy.
+### Reconciliation — where the code and `spec.md` disagree
+
+The code landed first and is authoritative on naming. Fix the *spec* to match, not the code:
+
+| Item | Code | `spec.md` says | Action |
+|------|------|----------------|--------|
+| Role ids | `sales_executive`, `pricing_executive`, … | `sales`, `pricing`, … | Adopt the code's `*_executive` names in §4 |
+| Permission strings | `customers.read` (dot) | `customer:*` (colon) | Adopt dot notation; extend the list as features land |
+| Write path API | `persistCreate` / `persistUpdate` | `createRepository<T>()` | Keep the functions; add Zod validation and soft-delete in P1-03 |
+| Audit entry | `{action, summary, metadata}` | `{previousValues, newValues, changedFields, reason, operationId}` | **Extend the code** — the brief (§6.18) requires before/after values and `operationId` |
+
+The last row is a real gap, not a naming preference: the audit log cannot currently answer "what changed" and the brief requires it.
 
 ### Known gaps to fix as you pass through
 
-1. `vite.config.ts` has no coverage thresholds — add them with P1-02 (`spec.md` §10 requires 100% branch coverage on domain).
-2. There is no CI job running `typecheck`/`lint`/`test` on pull requests; only the Netlify deploy workflow exists. **P1-10.**
-3. `tsconfig.app.json` does **not** set `noUncheckedIndexedAccess` — confirmed missing. `spec.md` §2 requires it; turn it on with P1-01 before there is much code to fix.
-4. `NoopSyncTransport` reports success for everything, so the outbox always drains. It is replaced in **P9-03** by `MockLoopbackTransport` and `DisabledTransport` (brief §7); until then, never read a drained outbox as evidence that sync works.
-5. `SyncOutboxEntry` in `src/types/base.ts` is missing `nextAttemptAt` and `dependencyOperationIds`, and its status union lacks `conflict` and `cancelled`. `spec.md` §5.24 is the target shape — extend it in P1-01 so later phases do not migrate again.
-6. `dashboard-page.tsx` and `air-freight-page.tsx` are marketing-style pages, which brief §12 explicitly forbids ("this is an operational ERP, not a marketing website"). They are replaced in P1-07.
-7. `npm run typecheck` and `npm run test:coverage` were added in this docs pass — the brief requires all eight scripts (`spec.md` §20) and all eight now work.
-
----
+1. `vite.config.ts` has no coverage thresholds — add with P1-02.
+2. No CI job runs `typecheck`/`lint`/`test` on pull requests; only the Netlify deploy workflow exists. **P1-10.**
+3. `tsconfig.app.json` does **not** set `noUncheckedIndexedAccess`. `spec.md` §2 requires it — turn it on before the codebase grows.
+4. `NoopSyncTransport` reports success for everything, so the outbox always drains. Replaced in **P9-03** by `MockLoopbackTransport` and `DisabledTransport` (brief §7). Never read a drained outbox as evidence that sync works.
+5. `SyncOutboxEntry` lacks `nextAttemptAt` and `dependencyOperationIds`, and its status union lacks `conflict` and `cancelled` (`spec.md` §5.24).
+6. `persistEntity` has no `persistDelete` and does not re-validate with Zod — both required by `spec.md` §3.2 and §7.
+7. Three `only-export-components` lint warnings in `auth-context`, `theme-context` and `command-palette` — harmless, but they will hide a real warning eventually.
 
 ## 3. Start here
 
-**The next three tasks are serial and block everything else.** Do them in order, in separate PRs:
+`main` already carries demo auth, the shell, permissions, a transactional write path, seed data, customers and inquiries. What is missing is the **operational core** — and three of those tasks block nearly everything else. Do them in order, in separate PRs.
 
-### P1-01 — Dexie schema v2
-Add every table from [`spec.md`](./spec.md) §5 in one migration: users, customers, customerContacts, inquiries, quotations, quotationLines, bookings, shipments, cargo, cargoPieces, consolidations, costAllocations, routeMaps, routeMapMilestones, shipmentEvents, documents, documentDiscrepancies, complianceChecks, dgChecklistItems, customsFilings, charges, invoices, payments, notifications, incidents, auditLogs, carriers, warehouses, locations, rateCards, rateLines, laneRules, routeMapTemplates, exceptionRoutingRules, syncConflicts, numberSequences.
+### P1-02 — Money domain (nothing exists; blocks all of Phase 2 and 7)
+`src/domain/money/` with integer minor units, `allocate()` using largest-remainder so parts always sum to the whole, explicit rounding, locale formatting. 100% branch coverage. **No monetary arithmetic exists in the repository today**, so this is a clean start — and quotations cannot be built without it.
 
-Index what the Workboard and shipment list actually query: `[customerId+status]`, `[status+updatedAt]`, `shipmentId`, `[shipmentId+sequence]`, `syncStatus`. Add a migration test that opens v1 and upgrades cleanly — Phase 0 data must survive.
+### P1-01 (revised) — Extend the Dexie schema
+Schema v2 has 6 domain tables. Add the rest from [`spec.md`](./spec.md) §5 as **v3**, in one migration: quotations, quotationLines, bookings, shipments, cargo, cargoPieces, consolidations, costAllocations, routeMaps, routeMapMilestones, shipmentEvents, shipmentNotes, documents, documentDiscrepancies, complianceChecks, dgChecklistItems, customsFilings, charges, invoices, payments, incidents, carriers, warehouses, locations, rateCards, rateLines, laneRules, routeMapTemplates, exceptionRoutingRules, syncConflicts, numberSequences.
 
-**Do this before anything else.** Schema churn after features exist is the most expensive mistake available here.
+Index what the dashboard and shipment list actually query: `[customerId+status]`, `[status+updatedAt]`, `shipmentId`, `[shipmentId+sequence]`, `syncStatus`. Include a migration test that opens v2 and upgrades cleanly — seeded demo data must survive.
 
-### P1-02 — Money domain
-`src/domain/money/` with integer minor units, `allocate()` using largest-remainder so parts always sum to the whole, explicit rounding, locale formatting. 100% branch coverage. No other task should invent monetary arithmetic.
+While here, close two gaps: extend `SyncOutboxEntry` to the shape in `spec.md` §5.24, and extend `AuditLogEntry` with `previousValues`, `newValues`, `changedFields`, `reason` and `operationId` (brief §6.18). Both are cheaper now than after twenty more tables reference them.
 
-### P1-03 — Base repository write path
-`createRepository<T>()` giving every aggregate the same transactional guarantee: validate (Zod) → bump `version` → set `updatedAt`/`updatedBy` → write `AuditLog` → enqueue `SyncOutboxEntry`, all in **one** Dexie transaction. Every later repository derives from this. Test that a write with a forced mid-transaction failure leaves no partial state.
+### P1-03 (revised) — Harden the write path
+`persistCreate` / `persistUpdate` already give one transaction covering table + outbox + audit. Add: Zod re-validation at the repository, `persistDelete` for soft deletes, and the before/after capture the extended audit entry needs. Test that a forced mid-transaction failure leaves no partial state.
 
-Then P1-04 … P1-08 per [`plan.md`](./plan.md) §2.
-
----
+Then Phase 2 continues from `P2-03` (rate cards) — customers (`P2-01`) and inquiry capture (`P2-02`) are substantially done and need reconciling with `spec.md` rather than rebuilding.
 
 ## 4. Working agreement
 

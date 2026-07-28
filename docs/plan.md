@@ -2,7 +2,7 @@
 
 Authoritative build schedule. Task IDs here are the unit of work: a branch, a commit series and a PR reference one task ID. Behaviour comes from [`user-flows.md`](./user-flows.md); rules and data come from [`spec.md`](./spec.md); current state comes from [`handoff.md`](./handoff.md).
 
-This supersedes the outline in `implementation-plan.md`, which is retained only as the Phase 0 record.
+Phase-level narrative and the architecture diagram live in [`implementation-plan.md`](./implementation-plan.md); this file is the task-level schedule.
 
 ---
 
@@ -22,15 +22,15 @@ This supersedes the outline in `implementation-plan.md`, which is retained only 
 
 | Phase | Theme | Tasks | Gate |
 |-------|-------|-------|------|
-| **0** | Scaffold | — | ✅ complete (commit `4577e05`) |
-| **1** | Platform foundation | P1-01 … P1-08 | Any role can log in, land on a Workboard, and every write audits + queues |
-| **2** | Commercial | P2-01 … P2-06 | Inquiry → quotation → approval → booking, fully offline |
-| **3** | Shipment core | P3-01 … P3-07 | Booking → shipment with a route map; guarded transitions; event timeline |
+| **0** | Scaffold | — | ✅ complete (`4577e05`) |
+| **1** | Platform foundation | P1-01 … P1-10 | 🟡 **partly done** (`d8bf819`) — auth, shell, permissions, write path, seed and notifications landed. Money, full schema and hygiene remain |
+| **2** | Commercial | P2-01 … P2-06 | 🟡 **started** — customers and inquiry capture landed; rating, quotations and bookings remain |
+| **3** | Shipment core | P3-01 … P3-09 | Booking → shipment with a route map; guarded transitions; event timeline |
 | **4** | Documents & compliance | P4-01 … P4-06 | Documents, simulated OCR, reconciliation, compliance and DG gates |
 | **5** | Carrier, consol & customs | P5-01 … P5-05 | Carrier comparison, consolidation, filings that block departure |
 | **6** | Physical operations | P6-01 … P6-04 | Pickup, warehouse receipt, delivery and POD — all fully offline |
 | **7** | Finance | P7-01 … P7-06 | Charges, invoices, payments, job P&L, closure freeze |
-| **8** | Exceptions & control tower | P8-01 … P8-04 | Incidents, escalation, delay detection, reports |
+| **8** | Exceptions & control tower | P8-01 … P8-05 | Incidents, escalation, delay detection, reports |
 | **9** | Sync, portal & hardening | P9-01 … P9-06 | Conflict resolution, customer portal, a11y, performance, seed demo |
 
 ---
@@ -41,14 +41,14 @@ This supersedes the outline in `implementation-plan.md`, which is retained only 
 
 | ID | Task | Delivers | Depends on |
 |----|------|----------|------------|
-| **P1-01** | Dexie schema v2 | All tables from `spec.md` §5 with indexes; migration from v1; schema test | — |
-| **P1-02** | Money domain | `src/domain/money`: add, subtract, multiplyByRate, allocate (largest-remainder), convert, format. 100% branch coverage | — |
-| **P1-03** | Base repository | `createRepository<T>()` — transactional write path: validate → version bump → audit → outbox. Every aggregate repo derives from it | P1-01 |
-| **P1-04** | Audit log | Append-only writer, `correlationId`, reason enforcement, audit viewer component | P1-03 |
-| **P1-05** | Demo auth + capabilities | Seeded users, session, `can()` guard, route guards, role switcher for demo. Labelled non-production everywhere | P1-01 |
-| **P1-06** | Seed & reference data | Locations (IATA/UN-LOCODE subset), carriers, warehouses, charge codes, lane rules, route-map templates, rate cards, settings | P1-01 |
-| **P1-07** | App shell + Workboard skeleton | **Collapsible left sidebar** with the required primary navigation, **mobile bottom nav + "More"**, Dashboard route with the Workboard as its default surface, `WorkItem` projection interface, three bands, loading/empty/error states, offline banner, sync indicator, toasts, unsaved-change protection | P1-05 |
-| **P1-08** | Notification centre | In-app notifications (real) + `NotificationChannelAdapter` with simulated badge | P1-03 |
+| **P1-01** | Dexie schema (revised) | Schema **v3** adding the ~30 tables still missing from `spec.md` §5; extend `SyncOutboxEntry` (§5.24) and `AuditLogEntry` (§6.18) at the same time; migration test from v2 preserving seeded data | — |
+| **P1-02** | Money domain | `src/domain/money`: add, subtract, multiplyByRate, allocate (largest-remainder), convert, format. 100% branch coverage. **Nothing exists yet — this blocks Phase 2 and 7** | — |
+| **P1-03** | Write path hardening | `persistCreate`/`persistUpdate` already do table + outbox + audit in one transaction. Add Zod re-validation, `persistDelete` for soft deletes, and before/after capture for the audit entry | P1-01 |
+| **P1-04** | Audit log | 🟡 `audit-service` + `audit-repository` write entries today. **Remaining:** before/after values, `operationId`, mandatory reasons, and the shared `<AuditTrail />` viewer on all eight entities (`spec.md` §5.22) | P1-03 |
+| **P1-05** | Demo auth + capabilities | ✅ **done in `d8bf819`** — `/welcome` role picker, session, `hasPermission()`, `RequireAuth`/`RequirePermission`, labelled non-production. Extend `Permission` as features land |
+| **P1-06** | Seed & reference data | 🟡 users, customers and inquiries seeded in `d8bf819`; IATA lookup exists in `domain/locations.ts`. **Remaining:** carriers, warehouses, charge codes, lane rules, route-map templates, rate cards, settings, and a **Reset Demo Data** action | P1-01 |
+| **P1-07** | App shell + Workboard | ✅ **largely done in `d8bf819`** — collapsible sidebar, mobile bottom nav, dashboard attention queue (the Workboard), skeletons, empty states, toasts, offline banner, command palette. **Remaining:** the rest of the required primary navigation as those modules land, and unsaved-change protection |
+| **P1-08** | Notification centre | 🟡 `notification-repository` and `notification-service` exist. **Remaining:** the in-app centre UI and `NotificationChannelAdapter` with simulated badges | P1-03 |
 | **P1-09** | Errors & resilience | Application error boundary, the ten typed domain error classes (`spec.md` §11), user-facing message map, local technical logging that excludes secrets and document contents | P1-03 |
 | **P1-10** | Project hygiene | Coverage thresholds in `vite.config.ts`, `noUncheckedIndexedAccess`, a CI workflow running `typecheck`/`lint`/`test` on pull requests | — |
 
@@ -56,11 +56,11 @@ This supersedes the outline in `implementation-plan.md`, which is retained only 
 
 > **Seed scope note:** P1-06 delivers *reference* data. The full demo dataset required by `spec.md` §17 — including the `EX/BLR/24/000123` shipment, varied statuses, conflicts and incidents — is **P9-06**, because it can only be built once the entities exist. Seeding must be idempotent from the first commit, and **"Reset Demo Data"** (with confirmation) ships in P1-06 so it is available throughout.
 
-**Commit series example (P1-03):**
+**Commit series example (P1-02):**
 ```
-feat: add transactional base repository write path
-feat: enforce audit + outbox on every repository write
-test: cover version bump and outbox idempotency
+feat: add decimal-safe money domain in minor units
+feat: add largest-remainder allocation
+test: cover rounding, allocation and currency mismatch
 ```
 
 ---
@@ -69,8 +69,8 @@ test: cover version bump and outbox idempotency
 
 | ID | Task | Delivers | Depends on |
 |----|------|----------|------------|
-| **P2-01** | Customers & contacts | CRUD, credit fields, compliance + security status, customer detail with timeline | P1-03 |
-| **P2-02** | Inquiry capture (F1) | Inline lead creation, location lookup, live volumetric/chargeable weight, sequence-block numbering | P2-01 |
+| **P2-01** | Customers & contacts | 🟡 list, search, filters, detail, status changes and a create form landed. **Remaining:** contacts, credit fields, compliance + security status (`D-16`), audit tab | P1-03 |
+| **P2-02** | Inquiry capture (F1) | 🟡 list, detail, form, workflow timeline and validated transitions landed; IATA lookup and lane templates work. **Remaining:** inline lead creation, live volumetric/chargeable weight, sequence-block numbering | P2-01 |
 | **P2-03** | Rate cards + instant rate (F2) | `RateCard`/`RateLine` admin, lane+weight-break lookup, draft charge generation, `no_rate_card` routing | P1-06 |
 | **P2-04** | Quotation build (F3) | Line editor, live margin banner, decimal-safe totals, Zod validation, revision model | P1-02, P2-03 |
 | **P2-05** | Quotation lifecycle (F4, F5) | State machine, margin-approval routing, send, accept/reject, expiry rule, immutable revisions | P2-04 |

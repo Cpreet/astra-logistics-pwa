@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db/astra-db'
 import { bootstrapLocalDatabase } from '@/db/bootstrap'
-import { countPendingOutbox } from '@/repositories/sync-outbox-repository'
-import { SyncEngine } from '@/sync/sync-engine'
 
 describe('local persistence bootstrap', () => {
   beforeEach(async () => {
@@ -11,23 +9,21 @@ describe('local persistence bootstrap', () => {
     await db.open()
   })
 
-  it('initializes device metadata and seeds a bootstrap outbox entry once', async () => {
+  it('initializes device metadata and marks bootstrap complete once', async () => {
     await bootstrapLocalDatabase()
-    const pending = await countPendingOutbox()
-    expect(pending).toBe(1)
+    const bootstrap = await db.appSettings.get('bootstrap_complete')
+    expect(bootstrap).toBeTruthy()
 
     await bootstrapLocalDatabase()
-    const pendingAgain = await countPendingOutbox()
-    expect(pendingAgain).toBe(1)
+    const again = await db.appSettings.get('bootstrap_complete')
+    expect(again?.value).toEqual(bootstrap?.value)
   })
 
-  it('drains the outbox with the noop transport when online', async () => {
+  it('seeds demo customers and inquiries on first run', async () => {
     await bootstrapLocalDatabase()
-    const engine = new SyncEngine()
-    const result = await engine.flush()
-    expect(result.processed).toBe(1)
-
-    const pending = await countPendingOutbox()
-    expect(pending).toBe(0)
+    const customers = await db.customers.toArray()
+    const inquiries = await db.inquiries.toArray()
+    expect(customers.length).toBeGreaterThanOrEqual(2)
+    expect(inquiries.length).toBeGreaterThanOrEqual(2)
   })
 })

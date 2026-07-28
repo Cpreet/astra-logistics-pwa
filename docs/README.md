@@ -19,6 +19,7 @@
 |----------|------------|
 | [implementation-plan.md](./implementation-plan.md) | Phase-level plan and the high-level architecture diagram |
 | [domain-model.md](./domain-model.md) | Entity overview and extensibility rules — companion to `spec.md` §5 |
+| [ux-principles.md](./ux-principles.md) | Onboarding and UI decisions, with the research behind them |
 | [state-machines.md](./state-machines.md) | Every state machine, its guards and its diagram |
 | [offline-sync.md](./offline-sync.md) | Sync engine, queue, conflict handling, PWA shell |
 | [security-notes.md](./security-notes.md) | What is simulated, real controls, production-hardening requirements |
