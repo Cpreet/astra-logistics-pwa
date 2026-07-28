@@ -1,27 +1,42 @@
 import type { HTMLAttributes } from 'react'
 import { cn } from '@/utils/cn'
 
-const variants = {
-  default: 'bg-slate-800 text-slate-200',
-  success: 'bg-emerald-950 text-emerald-300 ring-1 ring-emerald-800',
-  warning: 'bg-amber-950 text-amber-200 ring-1 ring-amber-800',
-  danger: 'bg-red-950 text-red-200 ring-1 ring-red-900',
-  info: 'bg-sky-950 text-sky-200 ring-1 ring-sky-800',
-} as const
+export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'brand'
+
+const tones: Record<BadgeTone, string> = {
+  neutral: 'bg-raised text-muted',
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+  info: 'bg-info-soft text-info',
+  brand: 'bg-brand-soft text-brand',
+}
 
 export function Badge({
-  variant = 'default',
-  className = '',
+  tone = 'neutral',
+  className,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { variant?: keyof typeof variants }) {
+}: HTMLAttributes<HTMLSpanElement> & { tone?: BadgeTone }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-        variants[variant],
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium',
+        tones[tone],
         className,
       )}
       {...props}
     />
   )
+}
+
+export function Dot({ tone = 'neutral' }: { tone?: BadgeTone }) {
+  const color: Record<BadgeTone, string> = {
+    neutral: 'bg-faint',
+    success: 'bg-success',
+    warning: 'bg-warning',
+    danger: 'bg-danger',
+    info: 'bg-info',
+    brand: 'bg-brand',
+  }
+  return <span className={cn('size-1.5 shrink-0 rounded-full', color[tone])} aria-hidden />
 }

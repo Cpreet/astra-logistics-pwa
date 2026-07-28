@@ -1,26 +1,138 @@
 @import 'tailwindcss';
 
-@theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+@theme inline {
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
+
+  --color-canvas: var(--astra-canvas);
+  --color-surface: var(--astra-surface);
+  --color-raised: var(--astra-raised);
+  --color-overlay: var(--astra-overlay);
+  --color-line: var(--astra-line);
+  --color-line-strong: var(--astra-line-strong);
+
+  --color-ink: var(--astra-ink);
+  --color-muted: var(--astra-muted);
+  --color-faint: var(--astra-faint);
+
+  --color-brand: var(--astra-brand);
+  --color-brand-hover: var(--astra-brand-hover);
+  --color-brand-soft: var(--astra-brand-soft);
+  --color-on-brand: var(--astra-on-brand);
+
+  --color-success: var(--astra-success);
+  --color-success-soft: var(--astra-success-soft);
+  --color-warning: var(--astra-warning);
+  --color-warning-soft: var(--astra-warning-soft);
+  --color-danger: var(--astra-danger);
+  --color-danger-soft: var(--astra-danger-soft);
+  --color-info: var(--astra-info);
+  --color-info-soft: var(--astra-info-soft);
+
+  --radius-card: 0.875rem;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px -12px rgb(0 0 0 / 0.25);
+  --shadow-pop: 0 12px 40px -8px rgb(0 0 0 / 0.45);
 }
 
 :root {
+  --astra-canvas: #f5f7fa;
+  --astra-surface: #ffffff;
+  --astra-raised: #eef2f7;
+  --astra-overlay: #ffffff;
+  --astra-line: #dde4ed;
+  --astra-line-strong: #c3cddb;
+
+  --astra-ink: #0d1726;
+  --astra-muted: #5b6b81;
+  --astra-faint: #8593a6;
+
+  --astra-brand: #1f6feb;
+  --astra-brand-hover: #1a5fd0;
+  --astra-brand-soft: #e7f0fd;
+  --astra-on-brand: #ffffff;
+
+  --astra-success: #0f7a52;
+  --astra-success-soft: #e3f7ee;
+  --astra-warning: #9a5b00;
+  --astra-warning-soft: #fdf1dc;
+  --astra-danger: #c02626;
+  --astra-danger-soft: #fdeaea;
+  --astra-info: #1a5fd0;
+  --astra-info-soft: #e7f0fd;
+
+  color-scheme: light;
+}
+
+.dark {
+  --astra-canvas: #070b13;
+  --astra-surface: #0d1421;
+  --astra-raised: #141d2e;
+  --astra-overlay: #111a29;
+  --astra-line: #1f2a3c;
+  --astra-line-strong: #2f3d54;
+
+  --astra-ink: #e9eef7;
+  --astra-muted: #93a1b6;
+  --astra-faint: #66748a;
+
+  --astra-brand: #3b82f6;
+  --astra-brand-hover: #5a97f8;
+  --astra-brand-soft: #10233d;
+  --astra-on-brand: #ffffff;
+
+  --astra-success: #34d399;
+  --astra-success-soft: #0b2a21;
+  --astra-warning: #fbbf24;
+  --astra-warning-soft: #2c2109;
+  --astra-danger: #f87171;
+  --astra-danger-soft: #2e1214;
+  --astra-info: #60a5fa;
+  --astra-info-soft: #10233d;
+
   color-scheme: dark;
-  font-family: var(--font-sans);
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   min-height: 100dvh;
-  background-color: #020617;
+  background-color: var(--astra-canvas);
+  color: var(--astra-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
 #root {
   min-height: 100dvh;
+}
+
+:focus-visible {
+  outline: 2px solid var(--astra-brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
