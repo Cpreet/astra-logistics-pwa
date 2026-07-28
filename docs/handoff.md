@@ -2,9 +2,9 @@
 
 **Read this first.** It states exactly where the project is, what has been verified, what to do next, and the rules every agent works under.
 
-- **Last verified:** 28 July 2026 against `main` at `d8bf819`
-- **Branch:** `claude/astra-logistics-erp-setup-x4pt7p` (all work goes here; never push elsewhere without explicit permission)
-- **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed) · Phase 2 started (customers, inquiries)
+- **Last verified:** 28 July 2026 against `main` at `bc1899e` (docs) + in-flight `P1-02` money domain
+- **Branch convention (this environment):** `cursor/<task>-1b46` off `main` — one task ID per PR
+- **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed, **money**) · Phase 2 started (customers, inquiries)
 
 ---
 
@@ -36,6 +36,7 @@ Precedence when documents disagree: `product-brief.md` states the requirement �
 Recent history on `main`:
 
 ```
+bc1899e  docs: ASTRA specification, delivery plan and agent handoff (#5)
 d8bf819  feat: frictionless onboarding and professional operations UI (#4)
 4577e05  ci: fail Netlify workflow when repository secrets are missing (#3)
 1977d26  fix: sync package-lock.json for CI and Netlify builds (#2)
@@ -62,20 +63,20 @@ npm run build       → 15 precache entries, 889 KiB
 | Permissions | `src/domain/permissions.ts` | 8 permissions × 10 roles, pure, tested |
 | Write path | `src/repositories/persist-entity.ts` | `persistCreate` / `persistUpdate` — one transaction covering table write + outbox + audit |
 | Repositories | `customer`, `inquiry`, `audit`, `notification`, `settings`, `user`, `sync-*` | The only Dexie callers |
-| Domain | `attention.ts`, `inquiry-workflow.ts`, `locations.ts`, `permissions.ts`, `role-home.ts` | Pure; attention queue and inquiry transitions are tested |
+| Domain | `attention.ts`, `inquiry-workflow.ts`, `locations.ts`, `permissions.ts`, `role-home.ts`, **`money/`** | Pure; attention, inquiry transitions and money are tested |
 | Services | `audit-service`, `notification-service`, `activation-service` | |
 | Pages | dashboard, customers (list/detail/form), inquiries (list/detail/form), sync, air-freight, welcome | Real workflows, not placeholders |
 | Shell | `app-header`, `app-sidebar`, `mobile-bottom-nav`, `mobile-tab-bar`, `nav-items`, `user-menu`, `quick-create-sheet` | Collapsible sidebar + mobile bottom nav |
 | UI kit | badge, button, card, empty-state, field, kbd, progress, segmented, sheet, skeleton, status-badge, timeline, toast | Light and dark themes via semantic tokens |
 | Extras | `command-palette`, `use-app-shortcuts`, `theme-context` | ⌘K palette, `g d`/`g i`/`g c`/`g a`/`g s`, `n` |
 | Sync | `sync-engine.ts`, `sync-transport.ts`, `/sync` page | Outbox drain + queue viewer; `NoopSyncTransport` only |
-| Tests | 5 files, 16 tests | bootstrap, attention, activation, inquiry-workflow, permissions |
+| Tests | 6 files, 42 tests | bootstrap, attention, activation, inquiry-workflow, permissions, **money (100% branch)** |
 
 **The attention queue on the dashboard is the Workboard concept from `user-flows.md` §2** — already built, severity-ranked, with the action attached. Extend it rather than starting again.
 
 ### What does **not** exist yet
 
-Shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route maps · **money utilities (no monetary arithmetic exists at all)** · OCR and every other adapter · conflict resolution · customer portal · reports · error boundary.
+Shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route maps · OCR and every other adapter · conflict resolution · customer portal · reports · error boundary.
 
 ### Reconciliation — where the code and `spec.md` disagree
 
@@ -102,12 +103,12 @@ The last row is a real gap, not a naming preference: the audit log cannot curren
 
 ## 3. Start here
 
-`main` already carries demo auth, the shell, permissions, a transactional write path, seed data, customers and inquiries. What is missing is the **operational core** — and three of those tasks block nearly everything else. Do them in order, in separate PRs.
+`main` already carries demo auth, the shell, permissions, a transactional write path, seed data, customers, inquiries, and **`src/domain/money` (P1-02 complete)**. What is missing is the **operational core** — and two remaining platform tasks still block nearly everything else. Do them in order, in separate PRs.
 
-### P1-02 — Money domain (nothing exists; blocks all of Phase 2 and 7)
-`src/domain/money/` with integer minor units, `allocate()` using largest-remainder so parts always sum to the whole, explicit rounding, locale formatting. 100% branch coverage. **No monetary arithmetic exists in the repository today**, so this is a clean start — and quotations cannot be built without it.
+### P1-02 — Money domain ✅ complete
+`src/domain/money/` with integer minor units, `add` / `subtract` / `multiplyByRate` / `allocate()` (largest-remainder) / `convert` / `format` / `marginOf`, 100% branch coverage. Quotations and finance must import from here only — no floats.
 
-### P1-01 (revised) — Extend the Dexie schema
+### P1-01 (revised) — Extend the Dexie schema ← **do this next**
 Schema v2 has 6 domain tables. Add the rest from [`spec.md`](./spec.md) §5 as **v3**, in one migration: quotations, quotationLines, bookings, shipments, cargo, cargoPieces, consolidations, costAllocations, routeMaps, routeMapMilestones, shipmentEvents, shipmentNotes, documents, documentDiscrepancies, complianceChecks, dgChecklistItems, customsFilings, charges, invoices, payments, incidents, carriers, warehouses, locations, rateCards, rateLines, laneRules, routeMapTemplates, exceptionRoutingRules, syncConflicts, numberSequences.
 
 Index what the dashboard and shipment list actually query: `[customerId+status]`, `[status+updatedAt]`, `shipmentId`, `[shipmentId+sequence]`, `syncStatus`. Include a migration test that opens v2 and upgrades cleanly — seeded demo data must survive.
