@@ -17,6 +17,8 @@ const statusTone: Record<SyncOutboxEntry['status'], 'warning' | 'info' | 'succes
   processing: 'info',
   completed: 'success',
   failed: 'danger',
+  conflict: 'danger',
+  cancelled: 'warning',
 }
 
 export function SyncPage() {

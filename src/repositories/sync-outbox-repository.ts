@@ -25,6 +25,8 @@ export async function enqueueMutation(
     attemptCount: 0,
     lastError: null,
     status: 'pending',
+    nextAttemptAt: null,
+    dependencyOperationIds: [],
   }
 
   await db.syncOutbox.put(entry)
