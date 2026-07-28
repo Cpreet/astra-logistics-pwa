@@ -7,36 +7,23 @@ import { createId } from '@/utils/id'
 import { nowUtcIso } from '@/utils/time'
 
 const SEED_VERSION_KEY = 'data_seed_version'
-const CURRENT_SEED_VERSION = 1
+const CURRENT_SEED_VERSION = 2
+
+function demoUser(id: string, name: string, email: string, role: User['role']): User {
+  return { id, name, email, role, active: true, avatarUrl: null, lastLoginAt: null }
+}
 
 const DEMO_USERS: User[] = [
-  {
-    id: 'user-admin-demo',
-    name: 'Alex Admin',
-    email: 'admin@astra.demo',
-    role: 'administrator',
-    active: true,
-    avatarUrl: null,
-    lastLoginAt: null,
-  },
-  {
-    id: 'user-sales-demo',
-    name: 'Sam Sales',
-    email: 'sales@astra.demo',
-    role: 'sales_executive',
-    active: true,
-    avatarUrl: null,
-    lastLoginAt: null,
-  },
-  {
-    id: 'user-ops-demo',
-    name: 'Olivia Ops',
-    email: 'ops@astra.demo',
-    role: 'operations_executive',
-    active: true,
-    avatarUrl: null,
-    lastLoginAt: null,
-  },
+  demoUser('user-sales-demo', 'Sam Rivera', 'sales@astra.demo', 'sales_executive'),
+  demoUser('user-ops-demo', 'Olivia Nkemi', 'ops@astra.demo', 'operations_executive'),
+  demoUser('user-pricing-demo', 'Priya Raman', 'pricing@astra.demo', 'pricing_executive'),
+  demoUser('user-docs-demo', 'Diego Marín', 'docs@astra.demo', 'documentation_executive'),
+  demoUser('user-compliance-demo', 'Chen Wei', 'compliance@astra.demo', 'compliance_officer'),
+  demoUser('user-warehouse-demo', 'Wanda Boateng', 'warehouse@astra.demo', 'warehouse_executive'),
+  demoUser('user-finance-demo', 'Farah Haddad', 'finance@astra.demo', 'finance_executive'),
+  demoUser('user-manager-demo', 'Marco Silva', 'manager@astra.demo', 'manager'),
+  demoUser('user-admin-demo', 'Alex Whitfield', 'admin@astra.demo', 'administrator'),
+  demoUser('user-customer-demo', 'Jordan Lee', 'portal@astra.demo', 'customer'),
 ]
 
 export async function runSeedIfNeeded(): Promise<void> {
@@ -49,7 +36,7 @@ export async function runSeedIfNeeded(): Promise<void> {
     await upsertUser(user)
   }
 
-  const salesUserId = DEMO_USERS[1].id
+  const salesUserId = DEMO_USERS[0].id
 
   const { customer: acme } = await createCustomer(salesUserId, {
     legalName: 'Acme Aero Components Ltd',
@@ -99,43 +86,83 @@ export async function runSeedIfNeeded(): Promise<void> {
     contactEmail: 'morgan@pacificretail.demo',
   })
 
-  await createInquiry(salesUserId, {
+  const stalled = await createInquiry(salesUserId, {
     customerId: acme.id,
     transportMode: 'air',
     direction: 'export',
     origin: { code: 'LHR', name: 'London Heathrow', countryCode: 'GB' },
     destination: { code: 'JFK', name: 'New York JFK', countryCode: 'US' },
     cargoSummary: '12 pallets — aerospace spare parts, non-DG',
-    requestedPickupDate: '2026-08-05',
-    requestedDeliveryDate: '2026-08-08',
+    requestedPickupDate: isoDaysFromNow(6),
+    requestedDeliveryDate: isoDaysFromNow(9),
     specialInstructions: 'Temperature monitoring not required',
     assignedSalesUserId: salesUserId,
   })
 
-  await createInquiry(salesUserId, {
+  const imminent = await createInquiry(salesUserId, {
     customerId: pacific.id,
     transportMode: 'air',
     direction: 'import',
     origin: { code: 'HKG', name: 'Hong Kong', countryCode: 'HK' },
     destination: { code: 'LAX', name: 'Los Angeles', countryCode: 'US' },
-    cargoSummary: 'Garments — 8 cartons, chargeable weight TBC',
-    requestedPickupDate: '2026-08-12',
+    cargoSummary: 'Garments — 8 cartons, chargeable weight to confirm',
+    requestedPickupDate: isoDaysFromNow(1),
     requestedDeliveryDate: null,
     specialInstructions: null,
     assignedSalesUserId: salesUserId,
   })
+
+  const idle = await createInquiry(salesUserId, {
+    customerId: acme.id,
+    transportMode: 'air',
+    direction: 'export',
+    origin: { code: 'FRA', name: 'Frankfurt', countryCode: 'DE' },
+    destination: { code: 'SIN', name: 'Singapore Changi', countryCode: 'SG' },
+    cargoSummary: '3 crates — calibration equipment, 480 kg',
+    requestedPickupDate: isoDaysFromNow(14),
+    requestedDeliveryDate: null,
+    specialInstructions: 'Customer asked for two rate options',
+    assignedSalesUserId: salesUserId,
+  })
+
+  // Backdate a few records so the attention queue demonstrates real exceptions.
+  await db.inquiries.update(stalled.id, {
+    status: 'quotation_in_progress',
+    updatedAt: isoDaysFromNow(-3),
+  })
+  await db.inquiries.update(idle.id, { updatedAt: isoDaysFromNow(-5) })
+  await db.inquiries.update(imminent.id, { updatedAt: isoDaysFromNow(-1) })
 
   await db.appSettings.put({
     key: SEED_VERSION_KEY,
     value: CURRENT_SEED_VERSION,
     updatedAt: nowUtcIso(),
   })
+}
 
-  await db.appSettings.put({
-    key: 'demo_notice_dismissed',
-    value: false,
-    updatedAt: nowUtcIso(),
-  })
+function isoDaysFromNow(days: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return days === 0 ? date.toISOString() : date.toISOString()
+}
+
+/** Clears operational demo records so a user can start from an empty workspace. */
+export async function clearDemoData(): Promise<void> {
+  await db.customers.clear()
+  await db.customerContacts.clear()
+  await db.inquiries.clear()
+  await db.auditLogs.clear()
+  await db.notifications.clear()
+  await db.syncOutbox.clear()
+  await db.appSettings.delete('activation_state')
+  await db.appSettings.delete('activation_dismissed')
+}
+
+/** Restores the demo dataset from scratch. */
+export async function reloadDemoData(): Promise<void> {
+  await clearDemoData()
+  await db.appSettings.delete(SEED_VERSION_KEY)
+  await runSeedIfNeeded()
 }
 
 export { DEMO_USERS }
