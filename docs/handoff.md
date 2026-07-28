@@ -2,7 +2,7 @@
 
 **Read this first.** It states exactly where the project is, what has been verified, what to do next, and the rules every agent works under.
 
-- **Last verified:** 28 July 2026 — P1-01 (schema v3), P1-02 (money) merged; UI density pass + error boundaries on the working branch
+- **Last verified:** 28 July 2026 — P1-01, P1-02, density pass and error boundaries merged; **P1-03 + P1-04 on the working branch**
 - **Branch convention (this environment):** `cursor/<task>-1b46` off `main` — one task ID per PR
 - **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed, **schema v3**, **money**) · Phase 2 started (customers, inquiries)
 
@@ -36,20 +36,20 @@ Precedence when documents disagree: `product-brief.md` states the requirement �
 Recent history on `main`:
 
 ```
+95e38f9  feat: operational density pass and error boundaries (#8)
+51b92b5  feat: add Dexie schema v3 with remaining domain tables (P1-01) (#7)
+95193b9  feat: P1-02 decimal-safe money domain (#6)
 bc1899e  docs: ASTRA specification, delivery plan and agent handoff (#5)
 d8bf819  feat: frictionless onboarding and professional operations UI (#4)
-4577e05  ci: fail Netlify workflow when repository secrets are missing (#3)
-1977d26  fix: sync package-lock.json for CI and Netlify builds (#2)
-04849ec  Scaffold ASTRA offline-first PWA (React, Vite, Dexie) (#1)
 ```
 
-Verified on 28 July 2026 after merging `d8bf819`:
+Verified on 28 July 2026 with P1-03 + P1-04 applied:
 
 ```
 npm ci              → clean install, exit 0
 npm run typecheck   → exit 0
-npm run lint        → exit 0 (3 fast-refresh warnings in context files)
-npm test            → 8 files, 51 tests passed
+npm run lint        → exit 0 (8 fast-refresh warnings in context files)
+npm test            → 11 files, 87 tests passed
 npm run build       → succeeds; no console errors in a headless Chromium pass
                       at 1440×900 and 390×844, no horizontal page overflow
 ```
@@ -62,7 +62,9 @@ npm run build       → succeeds; no console errors in a headless Chromium pass
 | Seed | `src/db/seed.ts` | Demo users, customers and inquiries; idempotent |
 | Demo auth | `src/features/auth/*` | `/welcome` role picker, session in IndexedDB, `RequireAuth`, `RequirePermission`. Labelled non-production in the README |
 | Permissions | `src/domain/permissions.ts` | 8 permissions × 10 roles, pure, tested |
-| Write path | `src/repositories/persist-entity.ts` | `persistCreate` / `persistUpdate` — one transaction covering table write + outbox + audit |
+| Write path | `src/repositories/persist-entity.ts` | `persistCreate` / `persistUpdate` / `persistDelete` — one transaction covering validate → write → outbox → audit, with field-level before/after capture |
+| Persistence schemas | `src/db/entity-schemas.ts` | Zod re-validation at the repository; `EntityValidationError` carries `E_VALIDATION` |
+| Audit viewer | `src/features/audit/audit-trail.tsx` | Shared `<AuditTrail entityId />` on customers and inquiries |
 | Repositories | `customer`, `inquiry`, `audit`, `notification`, `settings`, `user`, `sync-*` | The only Dexie callers |
 | Domain | `attention.ts`, `inquiry-workflow.ts`, `locations.ts`, `permissions.ts`, `role-home.ts`, **`money/`** | Pure; attention, inquiry transitions and money are tested |
 | Services | `audit-service`, `notification-service`, `activation-service` | |
@@ -72,13 +74,13 @@ npm run build       → succeeds; no console errors in a headless Chromium pass
 | Resilience | `components/layout/error-boundary.tsx` | `AppErrorBoundary` on the tree, `RouteErrorBoundary` on routes; local-only diagnostics |
 | Extras | `command-palette`, `use-app-shortcuts`, `theme-context` | ⌘K palette, `g d`/`g i`/`g c`/`g a`/`g s`, `n` |
 | Sync | `sync-engine.ts`, `sync-transport.ts`, `/sync` page | Outbox drain + queue viewer; `NoopSyncTransport` only |
-| Tests | 8 files, 51 tests | bootstrap, attention, activation, inquiry-workflow, permissions, **money (100% branch)**, schema-v3-migration, **data-table** |
+| Tests | 11 files, 87 tests | bootstrap, attention, activation, inquiry-workflow, permissions, money (100% branch), schema-v3-migration, data-table, **audit-diff**, **persist-entity**, **audit-trail** |
 
 **The attention queue on the dashboard is the Workboard concept from `user-flows.md` §2** — already built, severity-ranked, with the action attached. Extend it rather than starting again.
 
 ### What does **not** exist yet
 
-Repositories/UI/workflows for shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route-map planning logic · OCR and every other adapter · conflict resolution UI · customer portal · reports · error boundary.
+Repositories/UI/workflows for shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route-map planning logic · OCR and every other adapter · conflict resolution UI · customer portal · reports.
 
 ### Reconciliation — where the code and `spec.md` disagree
 
@@ -88,8 +90,8 @@ The code landed first and is authoritative on naming. Fix the *spec* to match, n
 |------|------|----------------|--------|
 | Role ids | `sales_executive`, `pricing_executive`, … | `sales`, `pricing`, … | Adopt the code's `*_executive` names in §4 |
 | Permission strings | `customers.read` (dot) | `customer:*` (colon) | Adopt dot notation; extend the list as features land |
-| Write path API | `persistCreate` / `persistUpdate` | `createRepository<T>()` | Keep the functions; add Zod validation and soft-delete in P1-03 |
-| Audit entry | optional before/after + `operationId` on the type (P1-01) | `{previousValues, newValues, changedFields, reason, operationId}` | **Wire capture in P1-03** — types exist; writers do not populate them yet |
+| Write path API | `persistCreate` / `persistUpdate` / `persistDelete` | `createRepository<T>()` | Keep the functions — validation and soft delete landed in P1-03 |
+| Audit entry | ✅ resolved in P1-03 — writers populate before/after, `changedFields`, `reason` and `operationId` | — | Done |
 
 ### Known gaps to fix as you pass through
 
@@ -98,7 +100,7 @@ The code landed first and is authoritative on naming. Fix the *spec* to match, n
 3. `tsconfig.app.json` does **not** set `noUncheckedIndexedAccess`. `spec.md` §2 requires it — turn it on before the codebase grows.
 4. `NoopSyncTransport` reports success for everything, so the outbox always drains. Replaced in **P9-03** by `MockLoopbackTransport` and `DisabledTransport` (brief §7). Never read a drained outbox as evidence that sync works.
 5. `SyncOutboxEntry` now has `nextAttemptAt` / `dependencyOperationIds` and `conflict`/`cancelled` statuses (P1-01); backoff and dependency ordering still land in **P9-01**.
-6. `persistEntity` has no `persistDelete` and does not re-validate with Zod — both required by `spec.md` §3.2 and §7. **P1-03.**
+6. ✅ resolved — `persistDelete` and repository-level Zod validation landed in P1-03. Schemas exist for `customer`, `customer_contact` and `inquiry`; **add one per aggregate as it lands** (`src/db/entity-schemas.ts`) — unregistered types are written unvalidated by design.
 7. `only-export-components` lint warnings in the context files — harmless, but they will hide a real warning eventually.
 8. **`Customer.creditLimit` is a plain major-unit number**, but `spec.md` §5.1 requires minor units like every other monetary field. `src/domain/money` now exists, so convert it before invoices are built — the cost only grows. Affects the type, seed, customer form and detail view.
 
