@@ -1,5 +1,8 @@
 # ASTRA Domain Model (overview)
 
+> **Companion to [`spec.md`](./spec.md) §5**, which is authoritative for fields, statuses and rules.
+> This file gives the shape of the model; `spec.md` gives the contract.
+
 ASTRA models freight-forwarding from inquiry through financial closure. The MVP emphasizes **air freight** while keeping `transportMode`, `direction`, and carrier types extensible for sea, road, rail, courier, import, and export.
 
 ## Base persistence fields
@@ -30,18 +33,44 @@ Most operational entities include:
 erDiagram
   Customer ||--o{ Inquiry : places
   Inquiry ||--o| Quotation : generates
+  Quotation ||--o{ QuotationLine : contains
   Quotation ||--o| Booking : converts
   Booking ||--o| Shipment : creates
+  Shipment ||--o| RouteMap : plans
+  RouteMap ||--o{ RouteMapMilestone : schedules
   Shipment ||--o{ Cargo : contains
+  Cargo ||--o{ CargoPiece : itemises
+  Consolidation ||--o{ Shipment : consolidates
+  Consolidation ||--o{ CostAllocation : allocates
   Shipment ||--o{ Document : requires
+  Document ||--o{ DocumentDiscrepancy : reconciles
   Shipment ||--o{ ShipmentEvent : tracks
   Shipment ||--o{ ComplianceCheck : validates
+  ComplianceCheck ||--o{ DgChecklistItem : itemises
+  Shipment ||--o{ CustomsFiling : declares
   Shipment ||--o{ Charge : bills
   Shipment ||--o{ Invoice : invoices
   Invoice ||--o{ Payment : settles
   Shipment ||--o{ Incident : escalates
   User ||--o{ Notification : receives
 ```
+
+## Aggregates added after market research
+
+These are not in the original brief. Each exists because the flow it supports is otherwise unimplementable — see [`market-research.md`](./market-research.md) for the evidence.
+
+| Aggregate | Why | Decision |
+|-----------|-----|----------|
+| **RouteMap / RouteMapMilestone** | Delay must be variance against a plan created at booking (Cargo iQ model), not a hand-typed field | `D-04`–`D-07` |
+| **Consolidation / CostAllocation** | MAWB/HAWB consolidation is the normal case in air forwarding; buy cost must allocate to houses auditably | `D-10`–`D-12` |
+| **CustomsFiling** | ICS2/AMS filings have their own lifecycle and legally gate departure | `D-13`–`D-15` |
+| **CargoPiece** | Piece-level tracking, and ONE Record models pieces as first-class objects | `D-02` |
+| **DocumentDiscrepancy** | Cross-document reconciliation is the honest, offline form of "AI document checking" | `D-22` |
+| **DgChecklistItem** | DG acceptance is an itemised IATA checklist, not a single boolean | `D-17` |
+| **RateCard / RateLine** | Instant quoting from stored rates; quote turnaround is a measured KPI | `D-21` |
+| **LaneRule / RouteMapTemplate / ExceptionRoutingRule** | Requirements, plans and routing are data, not code branches | `D-15`, `D-05`, `D-20` |
+
+`Charge` also gains `costBasis` (estimated/accrued/actual) and `isDisbursement`, because forwarder P&L is job costing with accruals and disbursements must stay out of gross profit (`D-23`–`D-25`).
 
 ## Transport and direction
 

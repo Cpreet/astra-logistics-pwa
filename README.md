@@ -16,8 +16,11 @@ Air freight is implemented first; the domain model already covers sea, road, rai
 | `npm run dev` | Start Vite dev server (PWA dev service worker enabled) |
 | `npm run build` | Production build |
 | `npm run preview` | Preview the production build |
-| `npm test` | Run Vitest unit tests |
+| `npm run typecheck` | TypeScript project check, no emit |
 | `npm run lint` | Oxlint |
+| `npm test` | Run Vitest unit tests |
+| `npm run test:watch` | Vitest in watch mode |
+| `npm run test:coverage` | Vitest with V8 coverage |
 
 ## Getting started in one tap
 
@@ -71,12 +74,23 @@ Try it: turn off your network, create a customer, and watch the offline banner, 
 
 ## Documentation
 
+Start with [`docs/handoff.md`](docs/handoff.md) — verified current state, next tasks, and the working agreement. Full index: [`docs/README.md`](docs/README.md).
+
 | Document | Contents |
 |----------|----------|
+| [docs/handoff.md](docs/handoff.md) | Current state, next tasks, conventions, PR checklist |
+| [docs/product-brief.md](docs/product-brief.md) | The original product brief, verbatim |
+| [docs/plan.md](docs/plan.md) | Phased delivery schedule (task IDs `P1-01`–`P9-06`) |
+| [docs/spec.md](docs/spec.md) | Canonical spec: architecture, domain model, state machines, screens, NFRs, acceptance criteria |
+| [docs/user-flows.md](docs/user-flows.md) | End-to-end flows `F1`–`F24`, role workboards, offline matrix |
+| [docs/market-research.md](docs/market-research.md) | 2026 market research and design decisions `D-01`–`D-30` |
 | [docs/ux-principles.md](docs/ux-principles.md) | Onboarding and UI decisions, with the research behind them |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | Phased build plan |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | Phase plan and architecture diagram |
 | [docs/domain-model.md](docs/domain-model.md) | Entities, statuses, and extensibility rules |
+| [docs/state-machines.md](docs/state-machines.md) | State machines and guards |
 | [docs/offline-sync.md](docs/offline-sync.md) | Outbox, conflicts, and transport design |
+| [docs/security-notes.md](docs/security-notes.md) | Simulated surfaces and production hardening |
+| [docs/future-backend.md](docs/future-backend.md) | Adding a backend without a rewrite |
 | [docs/deploy-netlify.md](docs/deploy-netlify.md) | Netlify + GitHub deployment |
 
 ## Deploy (Netlify + GitHub)
