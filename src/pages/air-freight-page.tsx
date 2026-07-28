@@ -1,45 +1,94 @@
+import { ArrowRight, FileText, Package, Plane, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { Card, CardDescription, CardTitle, SectionHeading } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { useCustomers } from '@/hooks/use-customers'
 import { useInquiries } from '@/hooks/use-inquiries'
-import { FileText, Users, Plane } from 'lucide-react'
+
+const ROADMAP = [
+  { label: 'Inquiries', state: 'live' as const },
+  { label: 'Quotations & margin approval', state: 'next' as const },
+  { label: 'Bookings', state: 'next' as const },
+  { label: 'Shipment lifecycle & tracking', state: 'planned' as const },
+  { label: 'Documents & compliance', state: 'planned' as const },
+  { label: 'Invoicing & profitability', state: 'planned' as const },
+]
 
 export function AirFreightPage() {
   const { data: inquiries = [] } = useInquiries()
-  const airInquiries = inquiries.filter((i) => i.transportMode === 'air')
+  const { data: customers = [] } = useCustomers()
+  const airInquiries = inquiries.filter((inquiry) => inquiry.transportMode === 'air')
+
+  const shortcuts = [
+    {
+      to: '/inquiries',
+      title: 'Air inquiries',
+      description: `${airInquiries.length} lane request${airInquiries.length === 1 ? '' : 's'}`,
+      icon: Plane,
+    },
+    {
+      to: '/customers',
+      title: 'Customers',
+      description: `${customers.length} account${customers.length === 1 ? '' : 's'}`,
+      icon: Users,
+    },
+    {
+      to: '/inquiries/new',
+      title: 'Capture a lane',
+      description: 'Templates fill most fields',
+      icon: FileText,
+    },
+  ]
 
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Module"
         title="Air freight"
-        description="Commercial air workflow — inquiries today, quotations and bookings next."
+        description="The air workflow is built first; the domain model already covers sea, road, rail, and courier."
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Link to="/inquiries" className="block rounded-xl border border-slate-800 bg-slate-900/50 p-4 active:bg-slate-900">
-          <Plane className="mb-2 size-6 text-sky-400" />
-          <CardTitle className="text-base">Inquiries</CardTitle>
-          <CardDescription>{airInquiries.length} air records</CardDescription>
-        </Link>
-        <Link to="/customers" className="block rounded-xl border border-slate-800 bg-slate-900/50 p-4 active:bg-slate-900">
-          <Users className="mb-2 size-6 text-emerald-400" />
-          <CardTitle className="text-base">Customers</CardTitle>
-          <CardDescription>CRM & contacts</CardDescription>
-        </Link>
-        <Link to="/inquiries/new" className="block rounded-xl border border-slate-800 bg-slate-900/50 p-4 active:bg-slate-900">
-          <FileText className="mb-2 size-6 text-violet-400" />
-          <CardTitle className="text-base">New inquiry</CardTitle>
-          <CardDescription>Capture lane & cargo</CardDescription>
-        </Link>
+        {shortcuts.map((shortcut) => (
+          <Link
+            key={shortcut.to}
+            to={shortcut.to}
+            className="group rounded-card border border-line bg-surface p-4 shadow-card transition-colors hover:border-brand"
+          >
+            <span className="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand-soft">
+              <shortcut.icon className="size-4 text-brand" aria-hidden />
+            </span>
+            <CardTitle className="flex items-center gap-1 text-sm">
+              {shortcut.title}
+              <ArrowRight
+                className="size-3.5 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-brand"
+                aria-hidden
+              />
+            </CardTitle>
+            <CardDescription className="mt-0.5 text-xs">{shortcut.description}</CardDescription>
+          </Link>
+        ))}
       </div>
 
-      <Card>
-        <CardTitle>Coming next</CardTitle>
-        <CardDescription className="mt-2">
-          Quotations with margin approval, bookings, shipment state machine, documents, and finance —
-          all offline-first with the same mobile shell.
-        </CardDescription>
-      </Card>
+      <section aria-label="Module roadmap">
+        <SectionHeading className="mb-2">Build order</SectionHeading>
+        <Card>
+          <ul className="space-y-2.5">
+            {ROADMAP.map((item) => (
+              <li key={item.label} className="flex items-center gap-3">
+                <Package className="size-4 shrink-0 text-faint" aria-hidden />
+                <span className="flex-1 text-sm text-ink">{item.label}</span>
+                <Badge
+                  tone={item.state === 'live' ? 'success' : item.state === 'next' ? 'brand' : 'neutral'}
+                >
+                  {item.state === 'live' ? 'Live' : item.state === 'next' ? 'Next' : 'Planned'}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </section>
     </div>
   )
 }

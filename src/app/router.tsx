@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { RequireAuth } from '@/features/auth/require-auth'
 import { RequirePermission } from '@/features/auth/require-permission'
+import { WelcomePage } from '@/features/onboarding/welcome-page'
 import { AppShell } from '@/layouts/app-shell'
 import { AirFreightPage } from '@/pages/air-freight-page'
 import { CustomerDetailPage } from '@/pages/customers/customer-detail-page'
@@ -10,18 +11,20 @@ import { DashboardPage } from '@/pages/dashboard-page'
 import { InquiryDetailPage } from '@/pages/inquiries/inquiry-detail-page'
 import { InquiryFormPage } from '@/pages/inquiries/inquiry-form-page'
 import { InquiriesPage } from '@/pages/inquiries/inquiries-page'
-import { LoginPage } from '@/pages/login-page'
+import { SyncPage } from '@/pages/sync-page'
 
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
+  { path: '/welcome', element: <WelcomePage /> },
+  { path: '/login', element: <Navigate to="/welcome" replace /> },
   {
     element: <RequireAuth />,
     children: [
       {
         element: <AppShell />,
         children: [
-          { index: true, element: <DashboardPage /> },
+          { index: true, path: '/', element: <DashboardPage /> },
           { path: 'modules/air', element: <AirFreightPage /> },
+          { path: 'sync', element: <SyncPage /> },
           {
             path: 'customers',
             element: (

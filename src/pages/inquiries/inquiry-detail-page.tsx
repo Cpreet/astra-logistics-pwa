@@ -1,31 +1,72 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { format, formatDistanceToNowStrict } from 'date-fns'
+import { ArrowRight, Building2, CalendarClock, Package } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
-import { canTransitionInquiry } from '@/domain/inquiry-workflow'
+import { Card, CardTitle, SectionHeading } from '@/components/ui/card'
+import { InquiryStatusBadge, SyncStatusBadge } from '@/components/ui/status-badge'
+import { Timeline, type TimelineStep } from '@/components/ui/timeline'
+import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/features/auth/auth-context'
+import { useActivation } from '@/hooks/use-activation'
 import { inquiryKeys } from '@/hooks/use-inquiries'
-import { getInquiryById, transitionInquiry } from '@/repositories/inquiry-repository'
+import { outboxKey } from '@/hooks/use-outbox'
 import { getCustomerById } from '@/repositories/customer-repository'
-import type { InquiryStatus } from '@/types/inquiry'
+import { getInquiryById, transitionInquiry } from '@/repositories/inquiry-repository'
+import { listAuditTrailForEntity } from '@/repositories/audit-repository'
+import type { Inquiry, InquiryStatus } from '@/types/inquiry'
 
-const NEXT_ACTIONS: Partial<Record<InquiryStatus, { label: string; to: InquiryStatus }[]>> = {
-  new: [
-    { label: 'Qualify', to: 'qualified' },
-    { label: 'Start quoting', to: 'quotation_in_progress' },
-  ],
-  qualified: [{ label: 'Start quoting', to: 'quotation_in_progress' }],
-  quotation_in_progress: [{ label: 'Mark quoted', to: 'quoted' }],
-  quoted: [{ label: 'Mark converted', to: 'converted' }],
+const STAGES: Array<{ status: InquiryStatus; label: string }> = [
+  { status: 'new', label: 'Received' },
+  { status: 'qualified', label: 'Qualified' },
+  { status: 'quotation_in_progress', label: 'Pricing' },
+  { status: 'quoted', label: 'Quoted' },
+  { status: 'converted', label: 'Won' },
+]
+
+const NEXT_ACTION: Partial<Record<InquiryStatus, { label: string; to: InquiryStatus }>> = {
+  new: { label: 'Qualify lane', to: 'qualified' },
+  qualified: { label: 'Start pricing', to: 'quotation_in_progress' },
+  quotation_in_progress: { label: 'Mark quoted', to: 'quoted' },
+  quoted: { label: 'Mark won', to: 'converted' },
+}
+
+function buildTimeline(inquiry: Inquiry): TimelineStep[] {
+  if (inquiry.status === 'lost' || inquiry.status === 'cancelled') {
+    return [
+      ...STAGES.slice(0, 1).map((stage) => ({
+        key: stage.status,
+        label: stage.label,
+        state: 'done' as const,
+      })),
+      {
+        key: inquiry.status,
+        label: inquiry.status === 'lost' ? 'Lost' : 'Cancelled',
+        caption: `Closed ${formatDistanceToNowStrict(new Date(inquiry.updatedAt))} ago`,
+        state: 'exception' as const,
+      },
+    ]
+  }
+
+  const currentIndex = STAGES.findIndex((stage) => stage.status === inquiry.status)
+  return STAGES.map((stage, index) => ({
+    key: stage.status,
+    label: stage.label,
+    caption:
+      index === currentIndex
+        ? `Updated ${formatDistanceToNowStrict(new Date(inquiry.updatedAt))} ago`
+        : undefined,
+    state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
+  }))
 }
 
 export function InquiryDetailPage() {
   const { id = '' } = useParams()
   const { user, can } = useAuth()
   const queryClient = useQueryClient()
+  const { notify } = useToast()
+  const { markStep } = useActivation()
 
   const { data: inquiry, isLoading } = useQuery({
     queryKey: inquiryKeys.detail(id),
@@ -39,112 +80,183 @@ export function InquiryDetailPage() {
     enabled: Boolean(inquiry?.customerId),
   })
 
+  const { data: audit = [] } = useQuery({
+    queryKey: ['audit', id],
+    queryFn: () => listAuditTrailForEntity(id),
+    enabled: Boolean(id),
+  })
+
   const transition = useMutation({
     mutationFn: (to: InquiryStatus) => {
       if (!user) throw new Error('Not signed in')
       return transitionInquiry(user.id, id, to)
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: inquiryKeys.detail(id) })
-      void queryClient.invalidateQueries({ queryKey: inquiryKeys.all })
+    onSuccess: async (updated) => {
+      await markStep('advanced_inquiry')
+      if (!navigator.onLine) await markStep('worked_offline')
+      await queryClient.invalidateQueries({ queryKey: inquiryKeys.detail(id) })
+      await queryClient.invalidateQueries({ queryKey: inquiryKeys.all })
+      await queryClient.invalidateQueries({ queryKey: ['audit', id] })
+      await queryClient.invalidateQueries({ queryKey: outboxKey })
+      notify({ tone: 'success', message: `Moved to ${updated.status.replaceAll('_', ' ')}` })
     },
+    onError: (error) =>
+      notify({
+        tone: 'error',
+        message: 'Transition not allowed',
+        description: error instanceof Error ? error.message : undefined,
+      }),
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading inquiry…</p>
+  if (isLoading) {
+    return <p className="text-sm text-muted">Loading inquiry…</p>
+  }
+
   if (!inquiry) {
     return (
-      <div>
-        <p className="text-slate-400">Inquiry not found.</p>
-        <Link to="/inquiries" className="text-sky-400">
-          Back
+      <div className="space-y-3">
+        <p className="text-sm text-muted">This inquiry no longer exists.</p>
+        <Link to="/inquiries" className="text-sm font-medium text-brand hover:underline">
+          Back to inquiries
         </Link>
       </div>
     )
   }
 
-  const actions = NEXT_ACTIONS[inquiry.status] ?? []
+  const next = NEXT_ACTION[inquiry.status]
+  const closable = !['lost', 'cancelled', 'converted'].includes(inquiry.status)
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={inquiry.inquiryNumber}
-        description={`${inquiry.transportMode.toUpperCase()} · ${inquiry.direction}`}
+        eyebrow={inquiry.inquiryNumber}
+        title={`${inquiry.origin.code} → ${inquiry.destination.code}`}
+        description={`${inquiry.transportMode.toUpperCase()} · ${inquiry.direction} · ${inquiry.origin.name} to ${inquiry.destination.name}`}
+        backTo="/inquiries"
+        backLabel="Inquiries"
         actions={
-          <Link to="/inquiries">
-            <Button variant="secondary" className="min-h-11">
-              Back
+          can('inquiries.write') && next ? (
+            <Button loading={transition.isPending} onClick={() => transition.mutate(next.to)}>
+              {next.label}
+              <ArrowRight className="size-4" aria-hidden />
             </Button>
-          </Link>
+          ) : null
         }
       />
 
-      <Badge variant="info">{inquiry.status.replaceAll('_', ' ')}</Badge>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardTitle>Customer</CardTitle>
-          <CardDescription className="mt-2 text-sm text-slate-300">
-            {customer ? (
-              <Link to={`/customers/${customer.id}`} className="text-sky-400 hover:underline">
-                {customer.legalName}
-              </Link>
-            ) : (
-              'Loading…'
-            )}
-          </CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Lane</CardTitle>
-          <CardDescription className="mt-2 text-sm">
-            {inquiry.origin.code} ({inquiry.origin.name}) → {inquiry.destination.code} (
-            {inquiry.destination.name})
-          </CardDescription>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardTitle>Cargo</CardTitle>
-          <CardDescription className="mt-2 text-sm">{inquiry.cargoSummary}</CardDescription>
-          {inquiry.specialInstructions ? (
-            <p className="mt-2 text-xs text-slate-500">{inquiry.specialInstructions}</p>
-          ) : null}
-          <p className="mt-3 text-xs text-slate-600">
-            Created {format(new Date(inquiry.createdAt), 'PPpp')}
-          </p>
-        </Card>
+      <div className="flex flex-wrap items-center gap-2">
+        <InquiryStatusBadge status={inquiry.status} />
+        <SyncStatusBadge status={inquiry.syncStatus} />
+        <span className="text-xs text-faint">
+          Updated {formatDistanceToNowStrict(new Date(inquiry.updatedAt))} ago
+        </span>
       </div>
 
-      {can('inquiries.write') ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          {actions.map((action) =>
-            canTransitionInquiry(inquiry.status, action.to) ? (
-              <Button
-                key={action.to}
-                className="min-h-11 w-full sm:w-auto"
-                disabled={transition.isPending}
-                onClick={() => transition.mutate(action.to)}
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
+        <div className="space-y-4">
+          <Card>
+            <CardTitle className="mb-4 text-sm">Progress</CardTitle>
+            <Timeline steps={buildTimeline(inquiry)} />
+          </Card>
+
+          <Card>
+            <CardTitle className="mb-3 text-sm">Cargo</CardTitle>
+            <p className="flex items-start gap-2 text-sm text-ink">
+              <Package className="mt-0.5 size-4 shrink-0 text-faint" aria-hidden />
+              {inquiry.cargoSummary}
+            </p>
+            {inquiry.specialInstructions ? (
+              <p className="mt-2 rounded-lg bg-raised p-2.5 text-xs text-muted">
+                {inquiry.specialInstructions}
+              </p>
+            ) : null}
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card>
+            <CardTitle className="mb-3 text-sm">Customer</CardTitle>
+            {customer ? (
+              <Link
+                to={`/customers/${customer.id}`}
+                className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-raised"
               >
-                {action.label}
-              </Button>
-            ) : null,
-          )}
-          {!['lost', 'cancelled', 'converted'].includes(inquiry.status) ? (
-            <>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft">
+                  <Building2 className="size-4 text-brand" aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-ink">
+                    {customer.legalName}
+                  </span>
+                  <span className="block text-xs text-muted">{customer.customerCode}</span>
+                </span>
+              </Link>
+            ) : (
+              <p className="text-sm text-muted">Loading…</p>
+            )}
+          </Card>
+
+          <Card>
+            <CardTitle className="mb-3 text-sm">Dates</CardTitle>
+            <dl className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="size-4 shrink-0 text-faint" aria-hidden />
+                <dt className="text-muted">Requested pickup</dt>
+                <dd className="ml-auto text-ink">
+                  {inquiry.requestedPickupDate
+                    ? format(new Date(inquiry.requestedPickupDate), 'PP')
+                    : '—'}
+                </dd>
+              </div>
+              <div className="flex items-center gap-2">
+                <CalendarClock className="size-4 shrink-0 text-faint" aria-hidden />
+                <dt className="text-muted">Requested delivery</dt>
+                <dd className="ml-auto text-ink">
+                  {inquiry.requestedDeliveryDate
+                    ? format(new Date(inquiry.requestedDeliveryDate), 'PP')
+                    : '—'}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          {can('inquiries.write') && closable ? (
+            <div className="flex gap-2">
               <Button
                 variant="secondary"
-                className="min-h-11 w-full sm:w-auto"
+                size="sm"
+                className="flex-1"
                 onClick={() => transition.mutate('lost')}
               >
                 Mark lost
               </Button>
               <Button
                 variant="ghost"
-                className="min-h-11 w-full sm:w-auto"
+                size="sm"
+                className="flex-1"
                 onClick={() => transition.mutate('cancelled')}
               >
                 Cancel
               </Button>
-            </>
+            </div>
           ) : null}
         </div>
+      </div>
+
+      {audit.length > 0 ? (
+        <section aria-label="History">
+          <SectionHeading className="mb-2">History</SectionHeading>
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+            {audit.map((entry) => (
+              <li key={entry.id} className="flex items-baseline gap-3 px-4 py-2.5 text-sm">
+                <span className="min-w-0 flex-1 text-ink">{entry.summary}</span>
+                <span className="shrink-0 text-xs text-faint">
+                  {format(new Date(entry.createdAt), 'PP p')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </div>
   )

@@ -1,31 +1,37 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
+import { FormActions } from '@/components/layout/form-actions'
 import { PageHeader } from '@/components/layout/page-header'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button, buttonClasses } from '@/components/ui/button'
+import { Field, FormSection, Input, Select } from '@/components/ui/field'
+import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/features/auth/auth-context'
+import { useActivation } from '@/hooks/use-activation'
 import { customerKeys } from '@/hooks/use-customers'
+import { outboxKey } from '@/hooks/use-outbox'
 import { createCustomer } from '@/repositories/customer-repository'
 
 const schema = z.object({
-  legalName: z.string().min(2, 'Legal name is required'),
-  tradingName: z.string().optional(),
+  legalName: z.string().min(2, 'Enter the registered company name'),
+  contactName: z.string().min(2, 'Who should we contact?'),
+  contactEmail: z.string().email('Enter a valid email'),
+  city: z.string().min(2, 'City is required'),
+  countryCode: z.string().min(2, 'Two-letter code').max(2),
   customerType: z.enum(['shipper', 'consignee', 'broker', 'direct']),
   status: z.enum(['lead', 'active', 'credit_hold', 'inactive']),
+  tradingName: z.string().optional(),
+  contactPhone: z.string().optional(),
+  line1: z.string().optional(),
+  postalCode: z.string().optional(),
   currency: z.string().min(3).max(3),
   creditLimit: z.number().min(0),
   paymentTermsDays: z.number().int().min(0),
-  contactName: z.string().min(2),
-  contactEmail: z.string().email(),
-  contactPhone: z.string().optional(),
-  line1: z.string().min(2),
-  city: z.string().min(2),
-  postalCode: z.string().min(2),
-  countryCode: z.string().min(2).max(2),
+  taxIdentifier: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -34,22 +40,27 @@ export function CustomerFormPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { notify } = useToast()
+  const { markStep } = useActivation()
+  const [showMore, setShowMore] = useState(false)
+
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      legalName: '',
+      contactName: '',
+      contactEmail: '',
+      city: '',
+      countryCode: 'US',
       customerType: 'shipper',
       status: 'lead',
       currency: 'USD',
       creditLimit: 50_000,
       paymentTermsDays: 30,
-      line1: '',
-      city: '',
-      postalCode: '',
-      countryCode: 'US',
     },
   })
 
@@ -58,18 +69,18 @@ export function CustomerFormPage() {
       if (!user) throw new Error('Not signed in')
       return createCustomer(user.id, {
         legalName: values.legalName,
-        tradingName: values.tradingName,
+        tradingName: values.tradingName || null,
         customerType: values.customerType,
-        taxIdentifier: null,
+        taxIdentifier: values.taxIdentifier || null,
         registrationNumber: null,
         creditLimit: values.creditLimit,
         paymentTermsDays: values.paymentTermsDays,
         currency: values.currency.toUpperCase(),
         status: values.status,
         billingAddress: {
-          line1: values.line1,
+          line1: values.line1 || '—',
           city: values.city,
-          postalCode: values.postalCode,
+          postalCode: values.postalCode || '—',
           countryCode: values.countryCode.toUpperCase(),
         },
         shippingAddresses: [],
@@ -80,135 +91,165 @@ export function CustomerFormPage() {
         contactPhone: values.contactPhone,
       })
     },
-    onSuccess: ({ customer }) => {
-      void queryClient.invalidateQueries({ queryKey: customerKeys.all })
-      navigate(`/customers/${customer.id}`)
+    onSuccess: async ({ customer }) => {
+      await markStep('created_customer')
+      if (!navigator.onLine) await markStep('worked_offline')
+      await queryClient.invalidateQueries({ queryKey: customerKeys.all })
+      await queryClient.invalidateQueries({ queryKey: outboxKey })
+      notify({
+        tone: 'success',
+        message: `${customer.legalName} added`,
+        description: navigator.onLine ? 'Queued for sync' : 'Saved offline on this device',
+      })
+      navigate(`/customers/${customer.id}`, { replace: true })
     },
+    onError: () => notify({ tone: 'error', message: 'Could not save the customer' }),
   })
 
   return (
     <div>
-      <PageHeader title="New customer" description="Capture shipper or consignee details for air freight quoting." />
+      <PageHeader
+        title="Add customer"
+        description="Four fields now, the rest whenever you need them."
+        backTo="/customers"
+        backLabel="Customers"
+      />
+
       <form
-        className="space-y-6"
+        className="space-y-4"
         onSubmit={handleSubmit((values) => mutation.mutate(values))}
+        noValidate
       >
-        <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold text-slate-200">Company</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <Label htmlFor="legalName">Legal name</Label>
-              <Input id="legalName" {...register('legalName')} />
-              {errors.legalName ? (
-                <p className="mt-1 text-xs text-red-400">{errors.legalName.message}</p>
-              ) : null}
-            </div>
-            <div>
-              <Label htmlFor="tradingName">Trading name</Label>
-              <Input id="tradingName" {...register('tradingName')} />
-            </div>
-            <div>
-              <Label htmlFor="customerType">Type</Label>
-              <select
-                id="customerType"
-                className="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-base text-slate-100"
-                {...register('customerType')}
-              >
-                <option value="shipper">Shipper</option>
-                <option value="consignee">Consignee</option>
-                <option value="broker">Broker</option>
-                <option value="direct">Direct</option>
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <select
-                id="status"
-                className="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-base text-slate-100"
-                {...register('status')}
-              >
-                <option value="lead">Lead</option>
-                <option value="active">Active</option>
-                <option value="credit_hold">Credit hold</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="currency">Currency</Label>
-              <Input id="currency" maxLength={3} {...register('currency')} />
-            </div>
-            <div>
-              <Label htmlFor="creditLimit">Credit limit</Label>
-              <Input id="creditLimit" type="number" inputMode="decimal" {...register('creditLimit')} />
-            </div>
-            <div>
-              <Label htmlFor="paymentTermsDays">Payment terms (days)</Label>
-              <Input id="paymentTermsDays" type="number" inputMode="numeric" {...register('paymentTermsDays')} />
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold text-slate-200">Primary contact</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="contactName">Name</Label>
-              <Input id="contactName" autoComplete="name" {...register('contactName')} />
-              {errors.contactName ? (
-                <p className="mt-1 text-xs text-red-400">{errors.contactName.message}</p>
-              ) : null}
-            </div>
-            <div>
-              <Label htmlFor="contactEmail">Email</Label>
-              <Input id="contactEmail" type="email" autoComplete="email" {...register('contactEmail')} />
-              {errors.contactEmail ? (
-                <p className="mt-1 text-xs text-red-400">{errors.contactEmail.message}</p>
-              ) : null}
-            </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="contactPhone">Phone</Label>
-              <Input id="contactPhone" type="tel" autoComplete="tel" {...register('contactPhone')} />
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold text-slate-200">Billing address</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <Label htmlFor="line1">Address line</Label>
-              <Input id="line1" autoComplete="street-address" {...register('line1')} />
-            </div>
-            <div>
-              <Label htmlFor="city">City</Label>
-              <Input id="city" autoComplete="address-level2" {...register('city')} />
-            </div>
-            <div>
-              <Label htmlFor="postalCode">Postal code</Label>
-              <Input id="postalCode" autoComplete="postal-code" {...register('postalCode')} />
-            </div>
-            <div>
-              <Label htmlFor="countryCode">Country (ISO)</Label>
-              <Input id="countryCode" maxLength={2} {...register('countryCode')} />
-            </div>
-          </div>
-        </section>
-
-        {mutation.isError ? (
-          <p className="text-sm text-red-400">Could not save customer. Try again.</p>
-        ) : null}
-
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Link
-            to="/customers"
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-700 px-4 text-sm font-medium text-slate-200"
+        <FormSection title="Essentials">
+          <Field
+            label="Legal name"
+            htmlFor="legalName"
+            error={errors.legalName?.message}
+            className="sm:col-span-2"
           >
+            <Input
+              id="legalName"
+              autoFocus
+              autoComplete="organization"
+              placeholder="Acme Aero Components Ltd"
+              {...register('legalName')}
+            />
+          </Field>
+
+          <Field label="Contact name" htmlFor="contactName" error={errors.contactName?.message}>
+            <Input id="contactName" autoComplete="name" {...register('contactName')} />
+          </Field>
+
+          <Field label="Contact email" htmlFor="contactEmail" error={errors.contactEmail?.message}>
+            <Input
+              id="contactEmail"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              enterKeyHint="next"
+              {...register('contactEmail')}
+            />
+          </Field>
+
+          <Field label="City" htmlFor="city" error={errors.city?.message}>
+            <Input id="city" autoComplete="address-level2" {...register('city')} />
+          </Field>
+
+          <Field label="Country" htmlFor="countryCode" error={errors.countryCode?.message}>
+            <Input
+              id="countryCode"
+              maxLength={2}
+              autoCapitalize="characters"
+              className="uppercase"
+              {...register('countryCode')}
+            />
+          </Field>
+        </FormSection>
+
+        <div className="rounded-card border border-line bg-surface shadow-card">
+          <button
+            type="button"
+            onClick={() => setShowMore((value) => !value)}
+            aria-expanded={showMore}
+            className="flex min-h-12 w-full items-center justify-between gap-2 px-4 text-left"
+          >
+            <span>
+              <span className="block text-sm font-semibold text-ink">Commercial details</span>
+              <span className="block text-xs text-muted">
+                Type, credit limit, terms, tax reference — all optional now
+              </span>
+            </span>
+            {showMore ? (
+              <ChevronUp className="size-4 shrink-0 text-faint" aria-hidden />
+            ) : (
+              <ChevronDown className="size-4 shrink-0 text-faint" aria-hidden />
+            )}
+          </button>
+
+          {showMore ? (
+            <div className="grid gap-4 border-t border-line p-4 sm:grid-cols-2">
+              <Field label="Trading name" htmlFor="tradingName" optional>
+                <Input id="tradingName" {...register('tradingName')} />
+              </Field>
+              <Field label="Contact phone" htmlFor="contactPhone" optional>
+                <Input id="contactPhone" type="tel" inputMode="tel" {...register('contactPhone')} />
+              </Field>
+              <Field label="Customer type" htmlFor="customerType">
+                <Select id="customerType" {...register('customerType')}>
+                  <option value="shipper">Shipper</option>
+                  <option value="consignee">Consignee</option>
+                  <option value="broker">Broker</option>
+                  <option value="direct">Direct</option>
+                </Select>
+              </Field>
+              <Field label="Status" htmlFor="status">
+                <Select id="status" {...register('status')}>
+                  <option value="lead">Lead</option>
+                  <option value="active">Active</option>
+                  <option value="credit_hold">Credit hold</option>
+                  <option value="inactive">Inactive</option>
+                </Select>
+              </Field>
+              <Field label="Address line" htmlFor="line1" optional>
+                <Input id="line1" autoComplete="street-address" {...register('line1')} />
+              </Field>
+              <Field label="Postal code" htmlFor="postalCode" optional>
+                <Input id="postalCode" autoComplete="postal-code" {...register('postalCode')} />
+              </Field>
+              <Field label="Currency" htmlFor="currency">
+                <Input id="currency" maxLength={3} className="uppercase" {...register('currency')} />
+              </Field>
+              <Field label="Credit limit" htmlFor="creditLimit">
+                <Input
+                  id="creditLimit"
+                  type="number"
+                  inputMode="decimal"
+                  {...register('creditLimit', { valueAsNumber: true })}
+                />
+              </Field>
+              <Field label="Payment terms (days)" htmlFor="paymentTermsDays">
+                <Input
+                  id="paymentTermsDays"
+                  type="number"
+                  inputMode="numeric"
+                  {...register('paymentTermsDays', { valueAsNumber: true })}
+                />
+              </Field>
+              <Field label="Tax reference" htmlFor="taxIdentifier" optional>
+                <Input id="taxIdentifier" {...register('taxIdentifier')} />
+              </Field>
+            </div>
+          ) : null}
+        </div>
+
+        <FormActions>
+          <Link to="/customers" className={buttonClasses('secondary', 'md')}>
             Cancel
           </Link>
-          <Button type="submit" className="min-h-11" disabled={isSubmitting || mutation.isPending}>
+          <Button type="submit" loading={mutation.isPending}>
             {mutation.isPending ? 'Saving…' : 'Save customer'}
           </Button>
-        </div>
+        </FormActions>
       </form>
     </div>
   )
