@@ -44,23 +44,25 @@ export function AttentionQueue({ items }: { items: AttentionItem[] }) {
           </div>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {items.slice(0, 6).map((item) => (
+        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+          {items.slice(0, 8).map((item) => (
             <li key={item.id}>
               <Link
                 to={item.to}
-                className="group flex items-stretch gap-3 overflow-hidden rounded-card border border-line bg-surface shadow-card transition-colors hover:border-line-strong"
+                className="group flex items-stretch gap-3 transition-colors hover:bg-raised"
               >
                 <span className={cn('w-1 shrink-0', severityBar[item.severity])} aria-hidden />
-                <span className="min-w-0 flex-1 py-3 pr-3">
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Badge tone={severityTone[item.severity]}>{severityLabel[item.severity]}</Badge>
-                    <span className="text-sm font-medium text-ink">{item.title}</span>
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 py-2.5 pr-3 sm:flex-nowrap">
+                  <Badge tone={severityTone[item.severity]} className="shrink-0">
+                    {severityLabel[item.severity]}
+                  </Badge>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-ink">{item.title}</span>
+                    <span className="block truncate text-xs text-muted">{item.detail}</span>
                   </span>
-                  <span className="mt-1 block text-xs leading-relaxed text-muted">
-                    {item.detail}
-                  </span>
-                  <span className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand">
+                  {/* Drops to its own line on narrow screens so the title is
+                      not truncated to compete with the action label. */}
+                  <span className="inline-flex shrink-0 basis-full items-center gap-1 whitespace-nowrap text-xs font-medium text-brand sm:basis-auto">
                     {item.actionLabel}
                     <ChevronRight
                       className="size-3 transition-transform group-hover:translate-x-0.5"

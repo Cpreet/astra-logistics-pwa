@@ -2,12 +2,14 @@ import { Plus, Search, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
+import { Badge } from '@/components/ui/badge'
 import { buttonClasses } from '@/components/ui/button'
+import { CellMuted, CellStrong, DataTable, type Column } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Input } from '@/components/ui/field'
 import { Segmented } from '@/components/ui/segmented'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { CustomerStatusBadge } from '@/components/ui/status-badge'
+import { ResultCount, Toolbar } from '@/components/ui/toolbar'
 import { useAuth } from '@/features/auth/auth-context'
 import { useCustomers } from '@/hooks/use-customers'
 import type { Customer } from '@/types/customer'
@@ -55,6 +57,93 @@ export function CustomersPage() {
     })
   }, [customers, filter, term])
 
+  const columns: Column<Customer>[] = [
+    {
+      id: 'code',
+      header: 'Code',
+      width: 'w-28',
+      numeric: true,
+      sortValue: (customer) => customer.customerCode,
+      cell: (customer) => <CellStrong>{customer.customerCode}</CellStrong>,
+    },
+    {
+      id: 'name',
+      header: 'Customer',
+      sortValue: (customer) => customer.legalName.toLowerCase(),
+      cell: (customer) => (
+        <>
+          <CellStrong>{customer.legalName}</CellStrong>
+          {customer.tradingName ? <CellMuted>{customer.tradingName}</CellMuted> : null}
+        </>
+      ),
+    },
+    {
+      id: 'location',
+      header: 'Location',
+      width: 'w-44',
+      hideBelow: 'md',
+      sortValue: (customer) => customer.billingAddress.countryCode,
+      cell: (customer) => (
+        <span className="truncate text-xs text-muted">
+          {customer.billingAddress.city}, {customer.billingAddress.countryCode}
+        </span>
+      ),
+    },
+    {
+      id: 'terms',
+      header: 'Terms',
+      width: 'w-24',
+      hideBelow: 'lg',
+      numeric: true,
+      align: 'right',
+      sortValue: (customer) => customer.paymentTermsDays,
+      cell: (customer) => (
+        <span className="whitespace-nowrap text-xs text-muted">{customer.paymentTermsDays} days</span>
+      ),
+    },
+    {
+      id: 'credit',
+      header: 'Credit limit',
+      width: 'w-32',
+      hideBelow: 'md',
+      numeric: true,
+      align: 'right',
+      sortValue: (customer) => customer.creditLimit,
+      cell: (customer) => (
+        <span className="whitespace-nowrap text-xs text-muted">
+          {new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: customer.currency,
+            maximumFractionDigits: 0,
+          }).format(customer.creditLimit)}
+        </span>
+      ),
+    },
+    {
+      id: 'compliance',
+      header: 'Compliance',
+      width: 'w-32',
+      hideBelow: 'lg',
+      sortValue: (customer) => customer.complianceStatus,
+      cell: (customer) =>
+        customer.complianceStatus === 'clear' ? (
+          <span className="text-xs text-muted">Clear</span>
+        ) : (
+          <Badge tone={customer.complianceStatus === 'hold' ? 'danger' : 'warning'}>
+            {customer.complianceStatus === 'hold' ? 'Hold' : 'Review'}
+          </Badge>
+        ),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      width: 'w-28',
+      align: 'right',
+      sortValue: (customer) => customer.status,
+      cell: (customer) => <CustomerStatusBadge status={customer.status} />,
+    },
+  ]
+
   return (
     <div>
       <PageHeader
@@ -70,33 +159,26 @@ export function CustomersPage() {
         }
       />
 
-      <div className="mb-4 space-y-2">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint"
-            aria-hidden
+      <Toolbar
+        searchValue={term}
+        onSearchChange={setTerm}
+        searchLabel="Search customers"
+        searchPlaceholder="Search name, code, or city"
+        filters={
+          <Segmented
+            label="Filter customers"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: 'all', label: 'All', count: counts.all },
+              { value: 'active', label: 'Active', count: counts.active },
+              { value: 'lead', label: 'Leads', count: counts.lead },
+              { value: 'attention', label: 'Attention', count: counts.attention },
+            ]}
           />
-          <Input
-            value={term}
-            onChange={(event) => setTerm(event.target.value)}
-            placeholder="Search name, code, or city"
-            aria-label="Search customers"
-            className="pl-9"
-            enterKeyHint="search"
-          />
-        </div>
-        <Segmented
-          label="Filter customers"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'All', count: counts.all },
-            { value: 'active', label: 'Active', count: counts.active },
-            { value: 'lead', label: 'Leads', count: counts.lead },
-            { value: 'attention', label: 'Attention', count: counts.attention },
-          ]}
-        />
-      </div>
+        }
+        trailing={<ResultCount shown={visible.length} total={customers.length} noun="customers" />}
+      />
 
       {isLoading ? (
         <ListSkeleton />
@@ -118,30 +200,14 @@ export function CustomersPage() {
       ) : visible.length === 0 ? (
         <EmptyState icon={Search} title="No matches" description="Adjust your search or filter." />
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
-          {visible.map((customer) => (
-            <li key={customer.id}>
-              <Link
-                to={`/customers/${customer.id}`}
-                className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors hover:bg-raised"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-raised text-xs font-semibold text-muted">
-                  {customer.legalName.slice(0, 2).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-ink">
-                    {customer.legalName}
-                  </span>
-                  <span className="block truncate text-xs text-muted">
-                    {customer.customerCode} · {customer.billingAddress.city},{' '}
-                    {customer.billingAddress.countryCode}
-                  </span>
-                </span>
-                <CustomerStatusBadge status={customer.status} />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          caption="Customers"
+          rows={visible}
+          columns={columns}
+          getRowId={(customer) => customer.id}
+          getRowHref={(customer) => `/customers/${customer.id}`}
+          initialSort={{ columnId: 'name', direction: 'asc' }}
+        />
       )}
     </div>
   )

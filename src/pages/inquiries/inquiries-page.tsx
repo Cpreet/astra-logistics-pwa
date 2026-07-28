@@ -4,11 +4,12 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
 import { buttonClasses } from '@/components/ui/button'
+import { CellMuted, CellStrong, DataTable, type Column } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Input } from '@/components/ui/field'
 import { Segmented } from '@/components/ui/segmented'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { InquiryStatusBadge } from '@/components/ui/status-badge'
+import { ResultCount, Toolbar } from '@/components/ui/toolbar'
 import { useAuth } from '@/features/auth/auth-context'
 import { useCustomers } from '@/hooks/use-customers'
 import { useInquiries } from '@/hooks/use-inquiries'
@@ -60,6 +61,87 @@ export function InquiriesPage() {
     })
   }, [inquiries, filter, term, customers])
 
+  const columns: Column<Inquiry>[] = [
+    {
+      id: 'number',
+      header: 'Inquiry',
+      width: 'w-36',
+      numeric: true,
+      sortValue: (inquiry) => inquiry.inquiryNumber,
+      cell: (inquiry) => <CellStrong>{inquiry.inquiryNumber}</CellStrong>,
+    },
+    {
+      id: 'lane',
+      header: 'Lane',
+      width: 'w-40',
+      sortValue: (inquiry) => `${inquiry.origin.code}${inquiry.destination.code}`,
+      cell: (inquiry) => (
+        <span className="tabular whitespace-nowrap font-medium text-ink">
+          {inquiry.origin.code} <span className="text-faint">→</span> {inquiry.destination.code}
+        </span>
+      ),
+    },
+    {
+      id: 'customer',
+      header: 'Customer',
+      sortValue: (inquiry) => customerName(inquiry.customerId),
+      cell: (inquiry) => (
+        <>
+          <CellStrong>{customerName(inquiry.customerId)}</CellStrong>
+          <CellMuted>{inquiry.cargoSummary}</CellMuted>
+        </>
+      ),
+    },
+    {
+      id: 'mode',
+      header: 'Mode',
+      width: 'w-28',
+      hideBelow: 'md',
+      sortValue: (inquiry) => inquiry.transportMode,
+      cell: (inquiry) => (
+        <span className="whitespace-nowrap text-xs text-muted">
+          {inquiry.transportMode.toUpperCase()} · {inquiry.direction}
+        </span>
+      ),
+    },
+    {
+      id: 'pickup',
+      header: 'Pickup',
+      width: 'w-28',
+      hideBelow: 'lg',
+      numeric: true,
+      sortValue: (inquiry) => inquiry.requestedPickupDate ?? '',
+      cell: (inquiry) => (
+        <span className="whitespace-nowrap text-xs text-muted">
+          {inquiry.requestedPickupDate
+            ? new Date(inquiry.requestedPickupDate).toLocaleDateString()
+            : '—'}
+        </span>
+      ),
+    },
+    {
+      id: 'updated',
+      header: 'Updated',
+      width: 'w-28',
+      hideBelow: 'sm',
+      numeric: true,
+      sortValue: (inquiry) => inquiry.updatedAt,
+      cell: (inquiry) => (
+        <span className="whitespace-nowrap text-xs text-muted">
+          {formatDistanceToNowStrict(new Date(inquiry.updatedAt))} ago
+        </span>
+      ),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      width: 'w-28',
+      align: 'right',
+      sortValue: (inquiry) => inquiry.status,
+      cell: (inquiry) => <InquiryStatusBadge status={inquiry.status} />,
+    },
+  ]
+
   return (
     <div>
       <PageHeader
@@ -75,36 +157,29 @@ export function InquiriesPage() {
         }
       />
 
-      <div className="mb-4 space-y-2">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint"
-            aria-hidden
+      <Toolbar
+        searchValue={term}
+        onSearchChange={setTerm}
+        searchLabel="Search inquiries"
+        searchPlaceholder="Search lane, number, or customer"
+        filters={
+          <Segmented
+            label="Filter inquiries"
+            value={filter}
+            onChange={(next) => {
+              setFilter(next)
+              setSearchParams(next === 'open' ? {} : { status: next }, { replace: true })
+            }}
+            options={[
+              { value: 'open', label: 'Open', count: counts.open },
+              { value: 'quoted', label: 'Quoted', count: counts.quoted },
+              { value: 'converted', label: 'Won', count: counts.converted },
+              { value: 'all', label: 'All', count: counts.all },
+            ]}
           />
-          <Input
-            value={term}
-            onChange={(event) => setTerm(event.target.value)}
-            placeholder="Search lane, number, or customer"
-            aria-label="Search inquiries"
-            className="pl-9"
-            enterKeyHint="search"
-          />
-        </div>
-        <Segmented
-          label="Filter inquiries"
-          value={filter}
-          onChange={(next) => {
-            setFilter(next)
-            setSearchParams(next === 'open' ? {} : { status: next }, { replace: true })
-          }}
-          options={[
-            { value: 'open', label: 'Open', count: counts.open },
-            { value: 'quoted', label: 'Quoted', count: counts.quoted },
-            { value: 'converted', label: 'Won', count: counts.converted },
-            { value: 'all', label: 'All', count: counts.all },
-          ]}
-        />
-      </div>
+        }
+        trailing={<ResultCount shown={visible.length} total={inquiries.length} noun="inquiries" />}
+      />
 
       {isLoading ? (
         <ListSkeleton />
@@ -133,33 +208,14 @@ export function InquiriesPage() {
           description="Try a different search term or switch the filter above."
         />
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
-          {visible.map((inquiry) => (
-            <li key={inquiry.id}>
-              <Link
-                to={`/inquiries/${inquiry.id}`}
-                className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors hover:bg-raised"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-x-2">
-                    <span className="tabular text-sm font-semibold text-ink">
-                      {inquiry.origin.code} → {inquiry.destination.code}
-                    </span>
-                    <span className="tabular text-xs text-faint">{inquiry.inquiryNumber}</span>
-                  </span>
-                  <span className="block truncate text-sm text-muted">
-                    {customerName(inquiry.customerId)}
-                  </span>
-                  <span className="block text-xs text-faint">
-                    {inquiry.transportMode.toUpperCase()} · {inquiry.direction} · updated{' '}
-                    {formatDistanceToNowStrict(new Date(inquiry.updatedAt))} ago
-                  </span>
-                </span>
-                <InquiryStatusBadge status={inquiry.status} />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          caption="Inquiries"
+          rows={visible}
+          columns={columns}
+          getRowId={(inquiry) => inquiry.id}
+          getRowHref={(inquiry) => `/inquiries/${inquiry.id}`}
+          initialSort={{ columnId: 'updated', direction: 'desc' }}
+        />
       )}
     </div>
   )
