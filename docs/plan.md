@@ -42,7 +42,7 @@ Phase-level narrative and the architecture diagram live in [`implementation-plan
 | ID | Task | Delivers | Depends on |
 |----|------|----------|------------|
 | **P1-01** | Dexie schema (revised) | ✅ **done** — Schema **v3** with remaining `spec.md` §5 tables; `SyncOutboxEntry` + `AuditLogEntry` extended; v2→v3 migration test | — |
-| **P1-02** | Money domain | 🟡 in PR `cursor/p1-02-money-domain-1b46` — integer minor units, allocate, convert, format; 100% branch coverage | — |
+| **P1-02** | Money domain | ✅ **done** — `src/domain/money`: add, subtract, multiplyByRate, allocate (largest-remainder), convert, format, marginOf. 100% branch coverage | — |
 | **P1-03** | Write path hardening | `persistCreate`/`persistUpdate` already do table + outbox + audit in one transaction. Add Zod re-validation, `persistDelete` for soft deletes, and before/after capture for the audit entry | P1-01 |
 | **P1-04** | Audit log | 🟡 `audit-service` + `audit-repository` write entries today. **Remaining:** before/after values, `operationId`, mandatory reasons, and the shared `<AuditTrail />` viewer on all eight entities (`spec.md` §5.22) | P1-03 |
 | **P1-05** | Demo auth + capabilities | ✅ **done in `d8bf819`** — `/welcome` role picker, session, `hasPermission()`, `RequireAuth`/`RequirePermission`, labelled non-production. Extend `Permission` as features land |
