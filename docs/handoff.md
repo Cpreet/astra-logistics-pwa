@@ -2,9 +2,9 @@
 
 **Read this first.** It states exactly where the project is, what has been verified, what to do next, and the rules every agent works under.
 
-- **Last verified:** 28 July 2026 against `main` at `bc1899e` (docs) + in-flight `P1-02` money domain
+- **Last verified:** 28 July 2026 — P1-01 (schema v3) and P1-02 (money) merged to `main`
 - **Branch convention (this environment):** `cursor/<task>-1b46` off `main` — one task ID per PR
-- **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed, **money**) · Phase 2 started (customers, inquiries)
+- **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed, **schema v3**, **money**) · Phase 2 started (customers, inquiries)
 
 ---
 
@@ -57,7 +57,7 @@ npm run build       → 15 precache entries, 889 KiB
 
 | Area | Files | State |
 |------|-------|-------|
-| Dexie schema | `src/db/astra-db.ts` | **v2.** `syncOutbox`, `syncMetadata`, `appSettings`, `users`, `customers`, `customerContacts`, `inquiries`, `auditLogs`, `notifications` — 6 of ~36 domain tables |
+| Dexie schema | `src/db/astra-db.ts` | **v3.** All `spec.md` §5 tables declared (quotations → numberSequences). Migration test preserves v2 data. `SyncOutboxEntry` + `AuditLogEntry` extended |
 | Seed | `src/db/seed.ts` | Demo users, customers and inquiries; idempotent |
 | Demo auth | `src/features/auth/*` | `/welcome` role picker, session in IndexedDB, `RequireAuth`, `RequirePermission`. Labelled non-production in the README |
 | Permissions | `src/domain/permissions.ts` | 8 permissions × 10 roles, pure, tested |
@@ -70,13 +70,13 @@ npm run build       → 15 precache entries, 889 KiB
 | UI kit | badge, button, card, empty-state, field, kbd, progress, segmented, sheet, skeleton, status-badge, timeline, toast | Light and dark themes via semantic tokens |
 | Extras | `command-palette`, `use-app-shortcuts`, `theme-context` | ⌘K palette, `g d`/`g i`/`g c`/`g a`/`g s`, `n` |
 | Sync | `sync-engine.ts`, `sync-transport.ts`, `/sync` page | Outbox drain + queue viewer; `NoopSyncTransport` only |
-| Tests | 6 files, 42 tests | bootstrap, attention, activation, inquiry-workflow, permissions, **money (100% branch)** |
+| Tests | 7 files, ~44 tests | bootstrap, attention, activation, inquiry-workflow, permissions, **money (100% branch)**, **schema-v3-migration** |
 
 **The attention queue on the dashboard is the Workboard concept from `user-flows.md` §2** — already built, severity-ranked, with the action attached. Extend it rather than starting again.
 
 ### What does **not** exist yet
 
-Shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route maps · OCR and every other adapter · conflict resolution · customer portal · reports · error boundary.
+Repositories/UI/workflows for shipments, quotations, bookings, cargo, documents, compliance, customs, carriers, consolidation, charges, invoices, payments, incidents · the shipment state machine · route-map planning logic · OCR and every other adapter · conflict resolution UI · customer portal · reports · error boundary.
 
 ### Reconciliation — where the code and `spec.md` disagree
 
@@ -87,9 +87,7 @@ The code landed first and is authoritative on naming. Fix the *spec* to match, n
 | Role ids | `sales_executive`, `pricing_executive`, … | `sales`, `pricing`, … | Adopt the code's `*_executive` names in §4 |
 | Permission strings | `customers.read` (dot) | `customer:*` (colon) | Adopt dot notation; extend the list as features land |
 | Write path API | `persistCreate` / `persistUpdate` | `createRepository<T>()` | Keep the functions; add Zod validation and soft-delete in P1-03 |
-| Audit entry | `{action, summary, metadata}` | `{previousValues, newValues, changedFields, reason, operationId}` | **Extend the code** — the brief (§6.18) requires before/after values and `operationId` |
-
-The last row is a real gap, not a naming preference: the audit log cannot currently answer "what changed" and the brief requires it.
+| Audit entry | optional before/after + `operationId` on the type (P1-01) | `{previousValues, newValues, changedFields, reason, operationId}` | **Wire capture in P1-03** — types exist; writers do not populate them yet |
 
 ### Known gaps to fix as you pass through
 
@@ -97,25 +95,21 @@ The last row is a real gap, not a naming preference: the audit log cannot curren
 2. No CI job runs `typecheck`/`lint`/`test` on pull requests; only the Netlify deploy workflow exists. **P1-10.**
 3. `tsconfig.app.json` does **not** set `noUncheckedIndexedAccess`. `spec.md` §2 requires it — turn it on before the codebase grows.
 4. `NoopSyncTransport` reports success for everything, so the outbox always drains. Replaced in **P9-03** by `MockLoopbackTransport` and `DisabledTransport` (brief §7). Never read a drained outbox as evidence that sync works.
-5. `SyncOutboxEntry` lacks `nextAttemptAt` and `dependencyOperationIds`, and its status union lacks `conflict` and `cancelled` (`spec.md` §5.24).
-6. `persistEntity` has no `persistDelete` and does not re-validate with Zod — both required by `spec.md` §3.2 and §7.
+5. `SyncOutboxEntry` now has `nextAttemptAt` / `dependencyOperationIds` and `conflict`/`cancelled` statuses (P1-01); backoff and dependency ordering still land in **P9-01**.
+6. `persistEntity` has no `persistDelete` and does not re-validate with Zod — both required by `spec.md` §3.2 and §7. **P1-03.**
 7. Three `only-export-components` lint warnings in `auth-context`, `theme-context` and `command-palette` — harmless, but they will hide a real warning eventually.
 
 ## 3. Start here
 
-`main` already carries demo auth, the shell, permissions, a transactional write path, seed data, customers, inquiries, and **`src/domain/money` (P1-02 complete)**. What is missing is the **operational core** — and two remaining platform tasks still block nearly everything else. Do them in order, in separate PRs.
+`main` now carries demo auth, the shell, permissions, a transactional write path, seed data, customers, inquiries, **`src/domain/money` (P1-02)**, and **Dexie schema v3 (P1-01)**. Next blocking platform task:
+
+### P1-01 — Dexie schema ✅ complete
+Schema v3 adds the remaining domain tables from `spec.md` §5, extends `SyncOutboxEntry` (`nextAttemptAt`, `dependencyOperationIds`, `conflict`/`cancelled`) and `AuditLogEntry` (before/after, `changedFields`, `reason`, `operationId`). Migration test opens a populated v2 DB and upgrades cleanly.
 
 ### P1-02 — Money domain ✅ complete
 `src/domain/money/` with integer minor units, `add` / `subtract` / `multiplyByRate` / `allocate()` (largest-remainder) / `convert` / `format` / `marginOf`, 100% branch coverage. Quotations and finance must import from here only — no floats.
 
-### P1-01 (revised) — Extend the Dexie schema ← **do this next**
-Schema v2 has 6 domain tables. Add the rest from [`spec.md`](./spec.md) §5 as **v3**, in one migration: quotations, quotationLines, bookings, shipments, cargo, cargoPieces, consolidations, costAllocations, routeMaps, routeMapMilestones, shipmentEvents, shipmentNotes, documents, documentDiscrepancies, complianceChecks, dgChecklistItems, customsFilings, charges, invoices, payments, incidents, carriers, warehouses, locations, rateCards, rateLines, laneRules, routeMapTemplates, exceptionRoutingRules, syncConflicts, numberSequences.
-
-Index what the dashboard and shipment list actually query: `[customerId+status]`, `[status+updatedAt]`, `shipmentId`, `[shipmentId+sequence]`, `syncStatus`. Include a migration test that opens v2 and upgrades cleanly — seeded demo data must survive.
-
-While here, close two gaps: extend `SyncOutboxEntry` to the shape in `spec.md` §5.24, and extend `AuditLogEntry` with `previousValues`, `newValues`, `changedFields`, `reason` and `operationId` (brief §6.18). Both are cheaper now than after twenty more tables reference them.
-
-### P1-03 (revised) — Harden the write path
+### P1-03 (revised) — Harden the write path ← **do this next**
 `persistCreate` / `persistUpdate` already give one transaction covering table + outbox + audit. Add: Zod re-validation at the repository, `persistDelete` for soft deletes, and the before/after capture the extended audit entry needs. Test that a forced mid-transaction failure leaves no partial state.
 
 Then Phase 2 continues from `P2-03` (rate cards) — customers (`P2-01`) and inquiry capture (`P2-02`) are substantially done and need reconciling with `spec.md` rather than rebuilding.
