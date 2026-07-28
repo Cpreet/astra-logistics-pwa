@@ -356,7 +356,7 @@ invoiceNumber, shipmentId, customerId, vendorId?, invoiceType (`customer | vendo
 
 Statuses: `draft | approved | issued | partially_paid | paid | overdue | disputed | void`.
 
-Rules: duplicate invoice numbers are detected and refused (device-prefixed sequences prevent offline collisions); issued invoices cannot be deleted — corrections are credit notes; payment application updates the balance; over-application beyond the remaining balance is refused; `overdue` is **derived** from due date and balance.
+Rules: duplicate invoice numbers are detected and refused (per-device sequence blocks prevent offline collisions, §8); issued invoices cannot be deleted — corrections are credit notes; payment application updates the balance; over-application beyond the remaining balance is refused; `overdue` is **derived** from due date and balance.
 
 ### 5.19 Payment
 
@@ -383,13 +383,39 @@ Escalation timers run locally and are simulated for external channels; in-app es
 
 ### 5.22 AuditLog (append-only)
 
-id, entityType, entityId, action, actorId, actorRole, occurredAt, before (partial), after (partial), changedFields[], reason?, correlationId, source (`user | system | sync`).
+id, entityType, entityId, action, actorId, actorRole, occurredAt, **previousValues** (partial), **newValues** (partial), changedFields[], reason?, source (`user | system | sync`), **operationId** (links the audit entry to the sync operation it produced).
 
-Rules: written inside the same transaction as the mutation; never updated or deleted; every override, approval, hold release, closure and reopen carries a mandatory `reason`; `correlationId` links all entries produced by one user action.
+Rules: written inside the same transaction as the mutation; never updated or deleted; every override, approval, hold release, closure and reopen carries a mandatory `reason`; `operationId` links all entries produced by one user action.
 
-### 5.23 Sync entities
+**Audit history must be viewable in the UI on:** customers, quotations, shipments, documents, compliance checks, invoices, payments, incidents. One shared `<AuditTrail entityType entityId />` component serves all eight.
 
-`SyncOutboxEntry` (operationId, entityType, entityId, operation, payload, baseVersion, createdAt, attemptCount, lastError, status), `SyncMetadata` (deviceId, lastSyncAt), `SyncConflict` (entityType, entityId, localSnapshot, remoteSnapshot, detectedAt, resolvedAt, resolution, resolvedBy).
+### 5.23 ShipmentNote
+
+shipmentId, body, authorId, visibility (`internal | customer`), createdAt, editedAt?, mentions[].
+
+Internal notes are the shipment's discussion thread (brief §8, "More" → internal shipment notes/chat). Customer-role sessions must never receive `internal` notes — enforced in the repository.
+
+### 5.24 Sync queue and conflicts
+
+**SyncQueueEntry** — id, operationId, entityType, entityId, action, payload, baseVersion, status, attempts, **nextAttemptAt**, createdAt, updatedAt, lastError, **dependencyOperationIds[]**.
+
+Statuses: `pending | processing | completed | failed | conflict | cancelled`.
+
+> The Phase 0 `SyncOutboxEntry` type in `src/types/base.ts` is a subset of this. P9-01 extends it — `nextAttemptAt`, `dependencyOperationIds`, and the `conflict`/`cancelled` statuses are missing today.
+
+**SyncMetadata** — deviceId, lastSyncAt, paused, sequenceBlockStart, sequenceBlockEnd.
+
+**SyncConflict** — entityType, entityId, localSnapshot, remoteSnapshot, differingFields[], detectedAt, resolvedAt, resolution (`keep_local | accept_remote | merge`), mergedFields, resolvedBy.
+
+**Required sync behaviour** (brief §7): create and edit offline · persist across browser restarts · queue mutations · show pending count · retry with exponential backoff · never apply the same operation twice · process dependent operations in order · expose sync history · manual retry · cancel safe pending operations · pause and resume · show last successful sync · detect version conflicts · resolve conflicts through the UI.
+
+**Required interfaces:** `LocalRepository`, `SyncTransport`, `SyncEngine`, `ConflictResolver`, `ConnectivityService`.
+
+**Required transports:** `MockLoopbackTransport` (simulates a server, holds server-like state separately, supports deterministic delays and failures) and `DisabledTransport` (keeps everything queued, for demonstrating fully offline operation). The Phase 0 `NoopSyncTransport` is replaced by these.
+
+**Development sync simulator** must let a user trigger: offline mode · slow connection · one failed request · repeated failures · version conflict · successful recovery.
+
+**Financial and compliance conflicts are never auto-resolved.** They always require an explicit human decision with a recorded reason.
 
 Design detail lives in [`offline-sync.md`](./offline-sync.md).
 
@@ -397,18 +423,19 @@ Design detail lives in [`offline-sync.md`](./offline-sync.md).
 
 ## 6. Priority scoring
 
-`priorityScore` is a pure, explainable function — no black box:
+`priorityScore` is a pure, explainable function — no black box. Inputs, per brief §9: current delay, customer SLA, shipment value, compliance hold, missing documents, dangerous goods, time until scheduled departure.
 
 ```
-score = w1·serviceLevelWeight
-      + w2·slaRiskFactor(routeMap)
-      + w3·customerTierWeight
-      + w4·cargoValueWeight
-      + w5·dgOrTempControlFlag
-      + w6·openIncidentSeverity
+score = w1·delayFactor(routeMap)
+      + w2·slaRiskFactor(customer, slaTargetAt)
+      + w3·cargoValueWeight
+      + w4·complianceHoldFlag
+      + w5·missingDocumentCount
+      + w6·dgOrTempControlFlag
+      + w7·timeToDepartureUrgency
 ```
 
-Weights live in settings. The UI shows the contribution of each term when a user asks why a shipment is at the top of the list. Any future ML scorer must fall back to this function when unavailable (`D-07`).
+Weights live in settings. The UI shows the contribution of each term when a user asks why a shipment is at the top of the list. Any future ML scorer must fall back to this function when unavailable (`D-07`), and returns the same envelope as every other adapter (§14).
 
 ---
 
@@ -422,7 +449,15 @@ Cross-entity invariants (documents complete, checks passed, filings accepted) be
 
 ## 8. Numbering
 
-Format `PREFIX-{DEVICE}-{YY}{SEQ}` — e.g. `SHP-A7-26000142`. The device segment prevents collisions between offline devices; sequences are allocated in the same transaction as the entity. Prefixes: `INQ`, `QTN`, `BKG`, `SHP`, `JOB`, `CNS`, `INV`, `PAY`, `INC`.
+Shipment and job numbers use the industry format the brief specifies:
+
+```
+{EX|IM|DM}/{ORIGIN}/{YY}/{SEQ6}      e.g.  EX/BLR/24/000123
+```
+
+Other entities use `{PREFIX}/{YY}/{SEQ6}` with prefixes `INQ`, `QTN`, `BKG`, `CNS`, `INV`, `PAY`, `INC`.
+
+**Offline collision safety without polluting the number.** Each device is assigned a **sequence block** at bootstrap (`SyncMetadata.sequenceBlockStart/End`); it allocates only from its own block, so two offline devices can never mint the same number and the number stays in the format above. Allocation happens inside the same Dexie transaction as the entity it names. Exhausting a block requests a new one on the next sync; the repository additionally refuses duplicates (`E_DUPLICATE_INVOICE_NUMBER`).
 
 ---
 
@@ -454,15 +489,38 @@ Format `PREFIX-{DEVICE}-{YY}{SEQ}` — e.g. `SHP-A7-26000142`. The device segmen
 | Permissions | Vitest | Every capability denied for at least one role; customer cross-scope read denied |
 | Accessibility | RTL | Keyboard path through each primary flow |
 
+**Required unit tests** (brief §16): quotation totals · margin calculation · tax calculation · chargeable-weight calculation · shipment transition validation · quotation transition validation · compliance rules · required-document logic · priority scoring · delay prediction · incident deduplication · invoice balance calculation · payment over-allocation prevention · sync backoff · conflict detection.
+
+**Required integration tests:** create customer · create inquiry · create quotation · accept quotation · convert to booking · convert to shipment · upload document · verify document · pass compliance · book carrier · advance through delivery · create invoice · record payment · financially close shipment · verify audit records · verify queued sync operations.
+
+**Required persistence tests:** data survives database recreation · pending operations survive reload · seed data does not duplicate · reset demo data works · Blob metadata persists.
+
+**Required UI smoke tests:** login works · dashboard loads · shipment list renders · shipment detail renders · offline banner appears · sync centre displays pending work · **customer user cannot see internal financial data**.
+
+Favour high-value behavioural coverage over snapshot tests.
+
 **Definition of done for any feature:** typecheck clean, lint clean, tests pass, new domain logic at 100% branch coverage, flow works offline per the `user-flows.md` matrix, audit entries verified, docs updated if behaviour changed.
 
 ---
 
-## 11. Error codes
+## 11. Error handling
 
-Domain refusals return typed codes, never bare strings: `E_TRANSITION_NOT_ALLOWED`, `E_FORBIDDEN`, `E_DOCS_INCOMPLETE`, `E_COMPLIANCE_BLOCKED`, `E_DISCREPANCY_OPEN`, `E_CARRIER_INCOMPLETE`, `E_RECEIPT_INCOMPLETE`, `E_CUSTOMS_NOT_ACCEPTED`, `E_SECURITY_NOT_SATISFIED`, `E_POD_MISSING`, `E_BILLING_INCOMPLETE`, `E_SHIPMENT_FROZEN`, `E_QUOTATION_EXPIRED`, `E_MARGIN_APPROVAL_REQUIRED`, `E_CREDIT_LIMIT_EXCEEDED`, `E_DUPLICATE_INVOICE_NUMBER`, `E_OVERPAYMENT`, `E_JOB_CLOSED`, `E_SEQUENCE`, `E_VALIDATION`.
+Domain refusals return typed errors, never bare strings. The ten error classes required by brief §14, and the codes under each:
 
-Each code maps to one user-facing message that says what is wrong **and what to do next**.
+| Class | Codes |
+|-------|-------|
+| `ValidationError` | `E_VALIDATION` |
+| `InvalidStateTransitionError` | `E_TRANSITION_NOT_ALLOWED`, `E_SEQUENCE`, `E_SHIPMENT_FROZEN`, `E_QUOTATION_EXPIRED` |
+| `EntityNotFoundError` | `E_NOT_FOUND` |
+| `PermissionError` | `E_FORBIDDEN` |
+| `DuplicateRecordError` | `E_DUPLICATE_INVOICE_NUMBER`, `E_DUPLICATE_NUMBER` |
+| `SyncError` | `E_SYNC_FAILED`, `E_SYNC_DEPENDENCY_FAILED` |
+| `VersionConflictError` | `E_VERSION_CONFLICT` |
+| `FinancialInconsistencyError` | `E_BILLING_INCOMPLETE`, `E_OVERPAYMENT`, `E_JOB_CLOSED`, `E_MARGIN_APPROVAL_REQUIRED`, `E_CREDIT_LIMIT_EXCEEDED` |
+| `ComplianceBlockError` | `E_COMPLIANCE_BLOCKED`, `E_DOCS_INCOMPLETE`, `E_DISCREPANCY_OPEN`, `E_CUSTOMS_NOT_ACCEPTED`, `E_SECURITY_NOT_SATISFIED`, `E_POD_MISSING`, `E_CARRIER_INCOMPLETE`, `E_RECEIPT_INCOMPLETE` |
+| `StorageError` | `E_QUOTA_EXCEEDED`, `E_BLOB_WRITE_FAILED` |
+
+Rules: every code maps to one user-facing message stating what is wrong **and what to do next**. An application-level error boundary catches render failures and offers recovery without losing local data. **Exceptions are never swallowed.** Technical context is logged locally; secrets and document contents are not.
 
 ---
 
@@ -494,5 +552,212 @@ Nothing here is real. Each is behind an interface, returns `{ simulated: true, m
 1. **New transport mode** = new enum value + a route-map template + lane rules + mode-specific optional fields. No duplicated workflow, no new state machine.
 2. **New document type** = enum value + extraction field map + lane-rule reference.
 3. **New compliance rule** = one pure predicate registered in the rule table.
-4. **Real backend** = implement `SyncTransport` and swap it at composition. Repositories, domain and UI are untouched.
-5. **Real AI** = implement the existing service interface; the deterministic version stays as the offline fallback (`D-07`).
+4. **Real backend** = implement `SyncTransport` and swap it at composition. Repositories, domain and UI are untouched. See [`future-backend.md`](./future-backend.md).
+5. **Real AI** = implement the existing adapter interface; the deterministic version stays as the offline fallback (`D-07`).
+
+---
+
+## 14. AI and adapter contracts
+
+Adapter interfaces required by brief §9: **OCR provider · delay-prediction provider · priority-scoring provider · carrier-tracking provider · notification provider · sanctions/compliance provider.** Each has a deterministic local implementation that behaves consistently and is testable.
+
+**Every AI-generated result carries this envelope. Uncertainty is never hidden:**
+
+```ts
+interface AiResult<T> {
+  value: T
+  provider: string          // 'astra-local-ocr'
+  ruleVersion: string       // model or rule version
+  generatedAt: string       // ISO 8601 UTC
+  confidence: number        // 0..1
+  explanation: string[]     // the factors that produced this result
+  requiresHumanReview: boolean
+  simulated: true           // MVP: always true (§12)
+}
+```
+
+**OCR simulation:** derives fields from file metadata and fixture data · produces per-field confidence · routes low-confidence results to the review queue · retries at most **twice** · raises a P3 incident when confidence is still below threshold after the final retry.
+
+**Delay prediction:** deterministic rules only · returns a predicted ETA · lists contributing factors in `explanation` · falls back to the scheduled ETA when the data is insufficient, and says so.
+
+**Priority scoring:** the pure function in §6, returned in the same envelope.
+
+---
+
+## 15. Application screens
+
+### 15.1 Layout
+
+Desktop: **collapsible left sidebar**. Mobile: **bottom navigation**. Tables scroll horizontally inside their own container; the page body never scrolls sideways.
+
+### 15.2 Primary navigation (required)
+
+Dashboard · Customers · Inquiries · Quotations · Shipments · Tracking · Documents · Compliance · Finance · Incidents · Reports · Notifications · Sync Centre · Settings.
+
+Mobile bottom navigation: Dashboard · Shipments · Tracking · Documents · **More**.
+"More" contains: Invoices · Payments · Notifications · Internal shipment notes · Sync status · Settings.
+
+Navigation items are filtered by role capability. The **Workboard** (`user-flows.md` §2) is the default landing surface within Dashboard — it is an addition to the required navigation, not a replacement for it.
+
+### 15.3 Screen requirements
+
+| Screen | Must provide |
+|--------|--------------|
+| **Login** | ASTRA branding, seeded account picker per role, session remembered locally, explicit statement that authentication is simulated |
+| **Dashboard** | Active/delivered/delayed shipments, pending documentation, compliance %, revenue, cost, profit, margin %, customer SLA performance, carrier performance, average customs-clearance time, open P1/P2 incidents, pending sync operations; status distribution, revenue vs. cost, recent activity, critical alerts, upcoming departures/arrivals, documentation exceptions. **Every chart derives from local data — no hardcoded values** |
+| **Customers** | Search, filter, sort, pagination/virtualisation, create, edit, detail with contacts, addresses, credit, shipment history, quotation history, invoice balance, audit history |
+| **Quotations** | List, create wizard, cargo input, origin/destination, charge-line editor, buy/sell calculations, margin warnings, validity dates, revision history, approval workflow, mark sent, accept/reject, **transactional** conversion to booking |
+| **Shipments — list** | Columns: number, customer, mode, direction, origin, destination, carrier, status, priority, ETA, delay, documentation status, compliance status, sync status. Filters: status, mode, import/export, customer, carrier, priority, delayed, documentation exception, compliance hold, date range |
+| **Shipments — detail** | Eleven tabs: Overview · Timeline · Cargo · Documents · Compliance · Carrier and routing · Charges · Invoices and payments · Incidents · Audit history · Internal notes. Plus a prominent **next-action panel** showing only actions legal for the current state *and* the active role |
+| **Tracking** | No paid mapping API. Route summary, origin/destination, current location label, milestone timeline, estimated vs. actual, delay status, last update source and time, freshness indicator, optional lightweight SVG route visual, manual event entry for Operations, simulated carrier updates for seeded shipments |
+| **Document workbench** | Drag-and-drop upload, required-document checklist, preview, OCR status, extracted fields, confidence, validation issues, verify/reject/replace, download local file, mark missing, request document via simulated notification, filters for low confidence / missing / by shipment, and a human-review queue |
+| **Compliance** | Queue, failed checks, warnings, holds, required-document gaps, DG cases, manual override with mandatory reason, release hold, audit trail. **A failed blocking rule prevents carrier booking or departure** |
+| **Finance** | Charge editor, buy vs. sell comparison, margin calculation, customer and vendor invoice lists, receivables, payables, payment recording, outstanding balance, overdue view, shipment/customer profitability, carrier cost analysis |
+| **Incidents** | Priority queue, SLA countdown, status filter, assignment, acknowledge, investigation notes, resolve, close, escalation history, links to shipment and source module |
+| **Reports** | Shipment count by status and by mode, on-time delivery rate, delayed shipments, documentation completeness, compliance pass rate, revenue, cost, gross profit, margin %, profitability by customer and by shipment, carrier performance, customs-clearance duration, open incidents by priority. **CSV export** |
+| **Sync Centre** | Pending count, queue inspector, sync history, manual retry, cancel safe operations, pause/resume, last successful sync, conflict resolution, dev simulator |
+| **Customer portal** | Own shipments, tracking timeline, customer-visible events, approved documents, invoices, payment status, notifications |
+
+### 15.4 Financial closure gate
+
+Closure is refused until: the customer invoice is issued · all mandatory charges are approved · the shipment is delivered · proof of delivery exists · blocking financial inconsistencies are resolved.
+
+### 15.5 Automatic incident generation
+
+Incidents are raised automatically for: low-confidence OCR after retry · missing required document · compliance failure · carrier cancellation · shipment delayed more than 24 hours · a sync operation failing repeatedly · financial mismatch.
+
+**Duplicate open incidents for the same underlying condition are prevented** — deduplication key is `(shipmentId, errorCode, subjectId)` while an incident is open.
+
+### 15.6 Customer portal exclusions
+
+A customer session must never receive: buy rates · internal margins · vendor invoices · internal notes · internal incidents · any other customer's data. Enforced at the repository boundary and covered by tests.
+
+---
+
+## 16. Transaction boundaries
+
+These multi-entity operations run in a single Dexie transaction and either complete fully or leave the database unchanged:
+
+1. Accept quotation and create booking
+2. Convert booking into shipment
+3. Transition shipment and append event
+4. Verify document and update documentation status
+5. Apply payment and update invoice
+6. Resolve conflict and write audit log
+7. Close shipment and write financial status
+
+Each has a test that forces a mid-transaction failure and asserts no partial state.
+
+---
+
+## 17. Seed data
+
+Generation must be **idempotent** — re-running never duplicates. A **"Reset Demo Data"** action with a confirmation dialog is required.
+
+Required volumes: 10 users across roles · 8 customers · 8 carriers · 4 warehouses · 15 inquiries · 12 quotations in varied statuses · 3 quotation revisions · 20 shipments across lifecycle stages · import and export examples · mostly air, at least one sea and one road · normal, dangerous and temperature-controlled cargo · 50+ shipment events · verified, missing and low-confidence documents · compliance warnings and a hold · customer and vendor invoices · partial and completed payments · an overdue invoice · P1–P4 incidents · pending sync operations · a failed sync operation · a version conflict.
+
+**Required representative shipment:**
+
+| Field | Value |
+|-------|-------|
+| Shipment number | `EX/BLR/24/000123` |
+| Type | Air Export |
+| Status | In Transit |
+| Origin → Destination | Bengaluru (BLR) → New York (JFK) |
+| Carrier / Flight | Qatar Airways (QR) / QR1145 |
+| MAWB | 157-12345678 |
+| Gross / chargeable weight | 1,250 kg / 1,350 kg |
+| Pieces | 120 |
+| Shipper → Consignee | ABC Exports Pvt Ltd → XYZ Imports LLC |
+
+---
+
+## 18. PWA and user experience
+
+**PWA:** manifest with name, short name, installable icons, theme colour, standalone display · service worker · offline app-shell caching · offline fallback · **safe update notification** · install-prompt handling. The app launches offline after the first visit, retains local data and the active session across refresh, shows network status and pending sync count, and recovers when connectivity returns. Mutable data responses are never cached blindly.
+
+**Visual direction:** clean and information-dense, strong hierarchy, neutral background, consistent operational status colours, high contrast, compact but readable tables, responsive, keyboard accessible, touch friendly.
+
+> **Status is never communicated by colour alone** — always a text label, plus icon/badge and an accessible description.
+
+**Required states:** loading · empty · error · offline banner · sync indicator · confirmation dialogs · destructive-action warnings · toasts · field-level validation · unsaved-change protection.
+
+**Avoid:** decorative gradients, excessive animation, and generic startup-style landing pages. This is operational ERP software, not a marketing site. *(The current `dashboard-page.tsx` and `air-freight-page.tsx` are exactly the marketing style this forbids — they are placeholders to be replaced, per `handoff.md` §2.)*
+
+---
+
+## 19. Security and privacy
+
+Frontend-only does not mean unguarded:
+
+- Validate all form input with Zod, at the form **and** at the repository.
+- Escape rendered user content; no `dangerouslySetInnerHTML` on user or document data.
+- Restrict file types (PDF/PNG/JPEG) and size (≤ 10 MB).
+- Store no credentials; commit no API secrets.
+- Do not log document contents.
+- Prevent customer-role data leakage at the repository/service boundary, not only in navigation.
+- Label demo authentication clearly wherever it appears.
+
+Detail and the production-hardening list: [`security-notes.md`](./security-notes.md). The README carries a production-security section.
+
+---
+
+## 20. Scripts and acceptance criteria
+
+**Required npm scripts** (all must work; no script may exist without its configuration): `dev`, `build`, `preview`, `typecheck`, `lint`, `test`, `test:watch`, `test:coverage`.
+
+**Acceptance criteria — the MVP is complete only when all 30 hold:**
+
+| # | Criterion | # | Criterion |
+|---|-----------|---|-----------|
+| 1 | Installs with `npm install` | 16 | Accepted quotations become bookings |
+| 2 | `npm run dev` launches | 17 | Bookings become shipments |
+| 3 | `npm run build` succeeds | 18 | Shipment transitions are validated |
+| 4 | `npm run typecheck` succeeds | 19 | Shipment events are append-only |
+| 5 | `npm run test` succeeds | 20 | Documents can be uploaded and reviewed |
+| 6 | Installable as a PWA | 21 | Low-confidence OCR enters the review queue |
+| 7 | Loads offline after first visit | 22 | Compliance failures block progression |
+| 8 | Data can be created offline | 23 | Charges give correct profitability figures |
+| 9 | Offline mutations appear in the sync queue | 24 | Invoices and payments update balances correctly |
+| 10 | Queued mutations can be retried | 25 | Delivered shipments reach financial closure |
+| 11 | A simulated conflict resolves through the UI | 26 | Incidents are generated for important failures |
+| 12 | Seeded users can log in | 27 | Dashboard values derive from persisted data |
+| 13 | Permissions change with the active role | 28 | Customer users cannot see internal rates or margins |
+| 14 | Customers can be created and edited | 29 | Important changes appear in audit history |
+| 15 | Quotations calculate totals and margins correctly | 30 | README accurately explains limitations and setup |
+
+No feature is reported complete unless it is implemented **and verified**. Final verification procedure: [`plan.md`](./plan.md) §14.
+
+---
+
+## 21. Requirement traceability
+
+Every section of [`product-brief.md`](./product-brief.md) maps to a home in this doc set. Nothing in the brief has been dropped.
+
+| Brief § | Requirement | Where it lives |
+|---------|-------------|----------------|
+| 1 | Product objective, 30-step lifecycle | `user-flows.md` §1 (F1–F24) |
+| 2 | Implementation mode, incremental commits | `plan.md` §0, `handoff.md` §4 |
+| 3 | Technology stack | §2 |
+| 4 | Architectural principles | §3 |
+| 5 | Ten user roles | §4 |
+| 6.1–6.17 | Core domain entities | §5.1–5.21 |
+| 6.18 | Audit log | §5.22 |
+| 6.19 | Sync queue | §5.24 |
+| 7 | Offline-first synchronization | §5.24, [`offline-sync.md`](./offline-sync.md), `user-flows.md` F24 |
+| 8 | Application screens | §15, `user-flows.md` §5 |
+| 9 | Automation and AI simulation | §14, §12 |
+| 10 | Transactions and consistency | §16 |
+| 11 | Seed data | §17 |
+| 12 | User experience | §18 |
+| 13 | PWA requirements | §18 |
+| 14 | Error handling | §11 |
+| 15 | Security and privacy | §19, [`security-notes.md`](./security-notes.md) |
+| 16 | Testing | §10 |
+| 17 | Documentation | [`README.md`](./README.md) doc index; all required files exist |
+| 18 | Required npm scripts | §20 |
+| 19 | Implementation order | [`implementation-plan.md`](./implementation-plan.md), [`plan.md`](./plan.md) |
+| 20 | Acceptance criteria | §20 |
+| 21 | Final verification | `plan.md` §14 |
+
+Additions beyond the brief — route maps, consolidation, customs filings, piece-level cargo, document discrepancies, DG checklists, rate cards, lane rules — are justified in [`market-research.md`](./market-research.md) §2. They extend the brief; they replace nothing in it.

@@ -57,7 +57,7 @@ Customer-facing visibility (`F23`) runs alongside from `F7` onward. Sync and con
 
 ## 2. Role workboards (`D-19`)
 
-Every authenticated user lands on `/work`. The Workboard is one component fed by a shared `WorkItem` projection, filtered by role. Three bands, always in this order:
+Every authenticated user lands on the **Dashboard**, whose default surface is the Workboard; the KPI cards and charts required by the brief (§8.2) sit alongside it on the same route. The Workboard is one component fed by a shared `WorkItem` projection, filtered by role. Three bands, always in this order:
 
 | Band | Meaning | Sort |
 |------|---------|------|
@@ -101,11 +101,11 @@ Each flow is written as: **trigger → actor → preconditions → steps → res
 2. Customer field is a combobox: pick existing, or type a new name → creates `Customer` with `status: 'lead'` inline. No context switch.
 3. Enter mode (air preselected), direction, origin/destination (airport/port code lookup, seeded IATA/UN-LOCODE data, works offline), cargo summary (pieces, gross weight, dimensions, commodity), requested pickup/delivery dates, incoterm, special instructions.
 4. System computes volumetric and chargeable weight live as dimensions are typed, showing the formula used.
-5. Save → `inquiryNumber` allocated from a local, collision-safe sequence (device-prefixed).
+5. Save → `inquiryNumber` allocated from this device's reserved sequence block (`spec.md` §8).
 
 **Resulting state** `Inquiry.status: 'new'`, assigned to the creating user, `WorkItem` raised for qualification.
 
-**Offline** Fully offline. Number allocation is device-prefixed so two offline devices cannot collide (`INQ-{DEVICE}-{SEQ}`), reconciled on sync.
+**Offline** Fully offline. Numbers come from this device's reserved sequence block, so two offline devices cannot collide while the number keeps its industry format (`INQ/26/000142`).
 
 **Exceptions** Chargeable weight implausible (density outside 5–1000 kg/m³) → inline warning, not a block, with the reason stated.
 
@@ -496,7 +496,7 @@ Each flow is written as: **trigger → actor → preconditions → steps → res
 **Steps**
 1. Finance opens the job's charge set: quoted lines (estimated), accrued lines added during operations, and actuals as vendor invoices arrive (`D-23`).
 2. **Generate customer invoice** from sell lines: subtotal, tax, disbursements shown as a separate recovered-at-cost block excluded from gross profit, total, due date from the customer's payment terms.
-3. Duplicate invoice-number detection is enforced at the repository level, including across offline devices (device-prefixed sequences reconciled on sync).
+3. Duplicate invoice-number detection is enforced at the repository level, including across offline devices (per-device sequence blocks, reconciled on sync).
 4. Issue → `issued`. Issued invoices cannot be deleted; a correction is a **credit note** referencing the original.
 5. Payments applied against the invoice update `paidAmount`/`balanceAmount`; over-application beyond the remaining balance is refused by the domain layer. `overdue` is derived from due date and outstanding balance, never stored by hand.
 6. Disputes: `disputed` with a reason, which surfaces on the Finance Workboard and pauses dunning.
@@ -564,9 +564,11 @@ Each flow is written as: **trigger → actor → preconditions → steps → res
 **Flows**
 1. A persistent, honest connectivity indicator: online/offline, pending operation count, last successful sync, and whether the transport is the simulated MVP one.
 2. Every record shows its sync state where it matters (`local | pending | syncing | synced | failed | conflict`).
-3. **Conflict resolution** (Administrator): field-level diff of local vs. remote, with keep-local / keep-remote / merge per field, an explicit resolution note, and an audit entry. Resolution is itself an idempotent queued operation.
-4. **Failed operations** show the error and a manual retry; retries reuse the same `operationId` so replay is safe.
-5. Long-offline devices show how stale their reference data is (rate cards, lane rules, exchange rates) and which flows that affects.
+3. **Sync Centre** exposes the queue and its history, and allows: manual retry · cancelling a *safe* pending operation (one nothing else depends on) · pausing and resuming synchronization · inspecting dependencies. Dependent operations are processed in order; a failed dependency holds its dependants rather than applying them out of sequence.
+4. **Conflict resolution** (Administrator): entity, local version, simulated remote version, the differing fields, and keep-local / accept-remote / merge-selected-fields, with a resolution note and an audit record. Resolution is itself an idempotent queued operation. **Financial and compliance conflicts are never auto-resolved.**
+5. **Failed operations** show the error and a manual retry; retries reuse the same `operationId` so replay is safe, with exponential backoff and `nextAttemptAt` shown.
+6. **Development sync simulator** lets a demonstrator trigger: offline mode · slow connection · one failed request · repeated failures · a version conflict · successful recovery. Two transports back this — `MockLoopbackTransport` (server-like state, deterministic delays and failures) and `DisabledTransport` (everything stays queued).
+7. Long-offline devices show how stale their reference data is (rate cards, lane rules, exchange rates) and which flows that affects.
 
 **Rules** No flow may block on the network. Any action whose real-world effect requires transmission (customs filing, carrier booking with a real marketplace, outbound email) must state that it is queued and not yet effective.
 
@@ -597,32 +599,48 @@ Each flow is written as: **trigger → actor → preconditions → steps → res
 
 ## 5. Navigation map
 
+Desktop uses a **collapsible left sidebar**; mobile uses **bottom navigation**. The primary items below are the set required by the brief (§8) — the Workboard is the default surface *inside* Dashboard, not a replacement for it. Items are filtered by role capability.
+
+**Primary navigation (required):** Dashboard · Customers · Inquiries · Quotations · Shipments · Tracking · Documents · Compliance · Finance · Incidents · Reports · Notifications · Sync Centre · Settings
+
+**Mobile bottom navigation:** Dashboard · Shipments · Tracking · Documents · More
+**"More":** Invoices · Payments · Notifications · Internal shipment notes · Sync status · Settings
+
 ```
-/login                        demo auth, seeded users (clearly labelled)
-/work                         role Workboard  ← default landing for every role
+/login                        demo auth, seeded account picker (clearly labelled simulated)
+/                             Dashboard — KPI cards, charts from local data
+  /?view=work                   role Workboard (default surface, §2)
+/customers                    list, /customers/:id (contacts, addresses, credit,
+                              shipment + quotation history, invoice balance, audit)
 /inquiries                    list, /inquiries/:id
-/quotations                   list, /quotations/:id (revisions tab)
+/quotations                   list, /quotations/:id (revision history, approval, convert)
 /bookings                     list, /bookings/:id
-/shipments                    list (saved views), /shipments/:id
-  /shipments/:id/overview       header, route map timeline, next action
-  /shipments/:id/cargo          pieces, weights, DG
-  /shipments/:id/documents      intake, OCR review, discrepancies
-  /shipments/:id/compliance     checks, DG checklist, security, holds
-  /shipments/:id/customs        filings and responses
-  /shipments/:id/carrier        comparison, booking, consol link
-  /shipments/:id/events         append-only timeline
-  /shipments/:id/finance        charges, P&L (estimated/accrued/actual)
-  /shipments/:id/audit          audit trail
+/shipments                    list (columns + filters per spec.md §15.3), /shipments/:id
+  …/overview                    header, route map, prominent next-action panel
+  …/timeline                    append-only events, planned vs. actual
+  …/cargo                       pieces, weights, DG
+  …/documents                   intake, OCR review, discrepancies
+  …/compliance                  checks, DG checklist, security, holds
+  …/carrier                     comparison, booking, routing, consol link, customs filings
+  …/charges                     buy/sell, margin
+  …/invoices                    invoices and payments
+  …/incidents                   linked incidents
+  …/audit                       audit history
+  …/notes                       internal notes (never visible to customer role)
+/tracking                     route summary, milestones, freshness, manual event entry
+/documents                    document workbench + human-review queue
+/compliance                   compliance queue, holds, overrides
 /consolidations               list, /consolidations/:id
 /warehouse                    receipt, screening, damage
-/incidents                    list by priority, /incidents/:id
-/finance/invoices             customer + vendor, /finance/invoices/:id
-/finance/payments             receipts and payments
-/finance/profitability        job P&L, WIP, lane margin
-/customers                    list, /customers/:id (contacts, credit, compliance)
-/carriers  /warehouses  /rate-cards      reference data
-/reports                      control tower views
-/admin/users  /admin/settings  /admin/sync   conflicts, outbox, seed control
+/finance                      charges, invoices (customer + vendor), payments,
+                              receivables, payables, profitability
+/incidents                    priority queue with SLA countdown, /incidents/:id
+/reports                      control tower views + CSV export
+/notifications                notification centre (in-app real, others badged simulated)
+/sync                         Sync Centre — queue, history, retry, cancel, pause/resume,
+                              conflicts, dev simulator
+/settings                     profile, thresholds, seed control, Reset Demo Data
+/admin/users                  administrator only
 /portal/*                     customer-scoped read-only views
 ```
 

@@ -16,7 +16,20 @@
 | `syncOutbox` table | Pending mutations with payload + entity refs |
 | `syncMetadata` table | Last sync cursor, device id |
 | `SyncEngine` | Poll connectivity, process outbox, update entity `syncStatus` |
-| `RestSyncTransport` (stub) | Future REST/GraphQL implementation |
+| `NoopSyncTransport` | **Phase 0 placeholder** — always succeeds. Replaced in P9-03 |
+
+## Target components (P9-01 … P9-03)
+
+Required interfaces: `LocalRepository`, `SyncTransport`, `SyncEngine`, `ConflictResolver`, `ConnectivityService`.
+
+Required transports:
+
+| Transport | Behaviour |
+|-----------|-----------|
+| `MockLoopbackTransport` | Simulates a server, holds server-like state separately, supports deterministic delays and failures |
+| `DisabledTransport` | Keeps every operation queued — demonstrates fully offline operation |
+
+A development **sync simulator** must trigger: offline mode · slow connection · one failed request · repeated failures · a version conflict · successful recovery. The Sync Centre exposes queue history, manual retry, cancellation of safe pending operations, and pause/resume. Operations declare `dependencyOperationIds` and are processed in order; a failed dependency holds its dependants. Full field list: `spec.md` §5.24.
 
 ## Write path
 
@@ -76,7 +89,7 @@ sync, conflict and device-trust flows.
 
 ## Offline number allocation
 
-Sequences are device-prefixed (`PREFIX-{DEVICE}-{YY}{SEQ}`, `spec.md` §8) and allocated inside the same
+Each device allocates from its own reserved sequence block (`spec.md` §8) inside the same
 transaction as the entity. Two offline devices must never allocate the same invoice or shipment number;
 duplicates are additionally detected at the repository on sync.
 

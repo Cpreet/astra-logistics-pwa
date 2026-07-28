@@ -47,10 +47,14 @@ This supersedes the outline in `implementation-plan.md`, which is retained only 
 | **P1-04** | Audit log | Append-only writer, `correlationId`, reason enforcement, audit viewer component | P1-03 |
 | **P1-05** | Demo auth + capabilities | Seeded users, session, `can()` guard, route guards, role switcher for demo. Labelled non-production everywhere | P1-01 |
 | **P1-06** | Seed & reference data | Locations (IATA/UN-LOCODE subset), carriers, warehouses, charge codes, lane rules, route-map templates, rate cards, settings | P1-01 |
-| **P1-07** | App shell + Workboard skeleton | Left nav by role, `/work` landing, `WorkItem` projection interface, three bands, empty states, offline indicator | P1-05 |
+| **P1-07** | App shell + Workboard skeleton | **Collapsible left sidebar** with the required primary navigation, **mobile bottom nav + "More"**, Dashboard route with the Workboard as its default surface, `WorkItem` projection interface, three bands, loading/empty/error states, offline banner, sync indicator, toasts, unsaved-change protection | P1-05 |
 | **P1-08** | Notification centre | In-app notifications (real) + `NotificationChannelAdapter` with simulated badge | P1-03 |
+| **P1-09** | Errors & resilience | Application error boundary, the ten typed domain error classes (`spec.md` §11), user-facing message map, local technical logging that excludes secrets and document contents | P1-03 |
+| **P1-10** | Project hygiene | Coverage thresholds in `vite.config.ts`, `noUncheckedIndexedAccess`, a CI workflow running `typecheck`/`lint`/`test` on pull requests | — |
 
-**Exit criteria:** log in as each of the 10 seeded users; each lands on a role-appropriate empty Workboard; a scratch write produces an audit entry and an outbox entry; money tests at 100% branch coverage; app loads with the network off.
+**Exit criteria:** log in as each of the 10 seeded users; each lands on a role-appropriate Dashboard/Workboard; a scratch write produces an audit entry and an outbox entry; money tests at 100% branch coverage; all eight required npm scripts pass; app loads with the network off.
+
+> **Seed scope note:** P1-06 delivers *reference* data. The full demo dataset required by `spec.md` §17 — including the `EX/BLR/24/000123` shipment, varied statuses, conflicts and incidents — is **P9-06**, because it can only be built once the entities exist. Seeding must be idempotent from the first commit, and **"Reset Demo Data"** (with confirmation) ships in P1-06 so it is available throughout.
 
 **Commit series example (P1-03):**
 ```
@@ -66,7 +70,7 @@ test: cover version bump and outbox idempotency
 | ID | Task | Delivers | Depends on |
 |----|------|----------|------------|
 | **P2-01** | Customers & contacts | CRUD, credit fields, compliance + security status, customer detail with timeline | P1-03 |
-| **P2-02** | Inquiry capture (F1) | Inline lead creation, location lookup, live volumetric/chargeable weight, device-prefixed numbering | P2-01 |
+| **P2-02** | Inquiry capture (F1) | Inline lead creation, location lookup, live volumetric/chargeable weight, sequence-block numbering | P2-01 |
 | **P2-03** | Rate cards + instant rate (F2) | `RateCard`/`RateLine` admin, lane+weight-break lookup, draft charge generation, `no_rate_card` routing | P1-06 |
 | **P2-04** | Quotation build (F3) | Line editor, live margin banner, decimal-safe totals, Zod validation, revision model | P1-02, P2-03 |
 | **P2-05** | Quotation lifecycle (F4, F5) | State machine, margin-approval routing, send, accept/reject, expiry rule, immutable revisions | P2-04 |
@@ -87,6 +91,8 @@ test: cover version bump and outbox idempotency
 | **P3-05** | Event timeline | Append-only events, FSU codes, idempotency by `sourceReference`, internal/customer visibility filter | P3-04 |
 | **P3-06** | Shipment workspace UI | Tabbed detail (overview/cargo/documents/compliance/customs/carrier/events/finance/audit), route-map timeline with planned vs. actual, "next action" panel | P3-04 |
 | **P3-07** | Milestone monitor | Local timer classifying `on_plan | at_risk | missed`, derived `delayMinutes`, Workboard feed | P3-03 |
+| **P3-08** | Tracking screen | Route summary, current location label, milestone timeline with estimated vs. actual, delay status, last update source/time, freshness indicator, lightweight SVG route visual (no paid map API), manual event entry, simulated carrier updates for seeded shipments | P3-05 |
+| **P3-09** | Internal notes | `ShipmentNote` thread on the shipment workspace and the mobile "More" screen; `internal` notes never reach a customer session (repository-enforced, tested) | P3-06 |
 
 **Exit criteria:** an Operations user creates a shipment with a full route map; an illegal transition is refused with its error code and a next step; a missed milestone appears on the Workboard within a minute — all offline.
 
@@ -158,9 +164,10 @@ Everything in this phase must complete **fully offline on a phone**. Test each w
 | **P8-01** | Incident engine | Auto-raise from rules, priority table, routing rules, lifecycle, root-cause codes | P3-07 |
 | **P8-02** | Escalation timers | Local per-priority timers, in-app escalation real, external simulated, Manager view | P8-01 |
 | **P8-03** | Delay prediction | Deterministic estimator with visible inputs, badged simulated, graceful default | P3-07 |
-| **P8-04** | Control tower | Operational, commercial, financial and compliance views; basis + as-of on every figure; CSV export; honest empty states | P7-02 |
+| **P8-04** | Dashboard KPIs & charts | Every metric in `spec.md` §15.3 (active/delivered/delayed, pending documentation, compliance %, revenue/cost/profit/margin, SLA and carrier performance, average clearance time, open P1/P2, pending sync) plus status distribution, revenue vs. cost, recent activity, critical alerts, upcoming departures/arrivals, documentation exceptions — **all derived from local data, no hardcoded chart values** | P7-02 |
+| **P8-05** | Reports & CSV | The 15 required reports (`spec.md` §15.3) with CSV export and honest empty states; basis + as-of stamped on every figure | P8-04 |
 
-**Exit criteria:** a missed milestone produces a routed incident that escalates on schedule and closes with a root cause; every reported figure names its basis and timestamp.
+**Exit criteria:** a missed milestone produces a routed incident that escalates on schedule and closes with a root cause; incident deduplication prevents a second open incident for the same condition; every reported figure names its basis and timestamp; no chart reads from a literal.
 
 ---
 
@@ -168,14 +175,14 @@ Everything in this phase must complete **fully offline on a phone**. Test each w
 
 | ID | Task | Delivers | Depends on |
 |----|------|----------|------------|
-| **P9-01** | Sync engine hardening | Exponential backoff, per-entity status propagation, replay safety, failed-op retry with the same `operationId` | P1-03 |
-| **P9-02** | Conflict resolution | `SyncConflict` table, field-level diff UI, keep-local/keep-remote/merge, resolution note + audit | P9-01 |
-| **P9-03** | Sync console | Outbox inspector, staleness of reference data, transport identity (states plainly that the MVP transport is simulated) | P9-01 |
-| **P9-04** | Customer portal (F23) | Scoped read-only shipments, action-required view, documents, invoices, quotation accept/reject | P3-05, P7-03 |
-| **P9-05** | Accessibility & performance | Keyboard paths, focus management, live regions, contrast; virtualised lists; NFR targets in `spec.md` §9 verified | all |
-| **P9-06** | Demo dataset & docs | Coherent seeded scenario spanning every state, README refresh, screenshots | all |
+| **P9-01** | Sync engine hardening | The five required interfaces (`LocalRepository`, `SyncTransport`, `SyncEngine`, `ConflictResolver`, `ConnectivityService`); exponential backoff with `nextAttemptAt`; dependency ordering via `dependencyOperationIds`; per-entity status propagation; replay safety; retry reusing the same `operationId` | P1-03 |
+| **P9-02** | Conflict resolution | `SyncConflict` table, version-conflict detection, field-level diff UI (entity, local version, simulated remote version, differing fields), keep-local / accept-remote / merge-selected, resolution note + audit record. **Financial and compliance conflicts never auto-resolve** | P9-01 |
+| **P9-03** | Sync Centre & simulator | Queue inspector, sync history, manual retry, cancel safe pending operations, pause/resume, last successful sync, reference-data staleness, transport identity; `MockLoopbackTransport` + `DisabledTransport`; dev simulator triggering offline / slow / one failure / repeated failures / conflict / recovery | P9-01 |
+| **P9-04** | Customer portal (F23) | Scoped read-only shipments, action-required view, tracking timeline, approved documents, invoices, payment status, notifications, quotation accept/reject. **Exclusions in `spec.md` §15.6 enforced at the repository and tested** | P3-05, P7-03 |
+| **P9-05** | Accessibility & performance | Keyboard paths, focus management, live regions, AA contrast, status never by colour alone; virtualised lists; table horizontal overflow; NFR targets in `spec.md` §9 measured | all |
+| **P9-06** | Demo dataset & docs | The full idempotent seed in `spec.md` §17 including `EX/BLR/24/000123`, every lifecycle stage, a compliance hold, an overdue invoice, P1–P4 incidents, a failed sync operation and a version conflict; README rewrite against brief §17; screenshots | all |
 
-**Exit criteria:** every NFR in `spec.md` §9 is measured and met; a customer-role session provably cannot read another customer's data; the demo dataset exercises every flow.
+**Exit criteria:** every NFR in `spec.md` §9 is measured and met; a customer-role session provably cannot read another customer's data; re-running the seed never duplicates; "Reset Demo Data" restores a clean demo; all 30 acceptance criteria in `spec.md` §20 hold.
 
 ---
 
@@ -224,10 +231,59 @@ Before a phase is called done, run and record:
 
 ```bash
 npm ci
+npm run typecheck
 npm run lint
-npm test            # + coverage on the domain modules the phase touched
+npm test            # + npm run test:coverage on the domain modules the phase touched
 npm run build
 npm run preview     # then: load once, go offline, reload, exercise the phase's flows
 ```
 
 Plus a manual offline pass on a phone-sized viewport for phases 3, 6 and 9.
+
+**Never start a later phase while the current one has TypeScript or build failures** (brief §19).
+
+---
+
+## 14. Final verification
+
+Before the MVP is reported complete, run this in order and record the result of each step:
+
+1. Install from a clean dependency state (`rm -rf node_modules && npm ci`)
+2. `npm run typecheck`
+3. `npm run lint`
+4. `npm test` (and `npm run test:coverage`)
+5. `npm run build`
+6. Load the preview build and inspect the browser console for errors
+7. Test offline mode
+8. Test refresh while offline
+9. Test adding data offline
+10. Test recovery after returning online
+11. Test a version conflict end to end
+12. Log in as each of the ten seeded roles and confirm permissions differ
+13. Review mobile layouts at common viewport sizes
+14. Verify no secrets or credentials are committed
+15. Verify the git working tree is clean
+
+Then produce: an implementation summary · the list of completed modules · the commands used to verify · test results · known limitations · the recommended next backend milestone (see [`future-backend.md`](./future-backend.md)).
+
+**Do not report a feature as complete unless it is implemented and verified.**
+
+---
+
+## 15. Mapping to the brief's phase list
+
+The brief (§19) gives nine phases. They map to the task IDs above; the ordering differs only where a dependency demanded it, and every brief phase is covered.
+
+| Brief phase | Covered by |
+|-------------|-----------|
+| 1 Foundation — Vite/TS, lint, routing, design system, PWA, shell, demo auth | **Phase 0** (done) + P1-05, P1-07, P1-09, P1-10 |
+| 2 Persistence — Dexie, entity types, repositories, seed, audit | P1-01, P1-03, P1-04, P1-06 |
+| 3 Customers and quotations | P2-01 … P2-06, P1-02 (financial calculations) |
+| 4 Shipment operations — booking conversion, creation, state machine, cargo, timeline, tracking | P3-01 … P3-09 |
+| 5 Documents and compliance | P4-01 … P4-06 (+ P5-05 customs, an addition per `D-13`) |
+| 6 Finance | P7-01 … P7-06 (+ P5-03/P5-04 consolidation costing, per `D-10`) |
+| 7 Exceptions and sync | P8-01 … P8-03, P9-01 … P9-03 |
+| 8 Dashboards and customer portal | P8-04, P8-05, P9-04 |
+| 9 Quality — tests, accessibility, performance, docs, build verification | P9-05, P9-06, §14 above |
+
+Carrier comparison and consolidation (Phase 5 here) have no equivalent brief phase — they are research-driven additions (`D-10`, `D-27`) and are sequenced where their dependencies fall.

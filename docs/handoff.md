@@ -13,16 +13,20 @@
 | Read when | Document |
 |-----------|----------|
 | Picking up work — start here | **`handoff.md`** (this file) |
+| What the customer actually asked for | [`product-brief.md`](./product-brief.md) — verbatim, never edited |
 | What to build next, in what order | [`plan.md`](./plan.md) |
-| Data model, rules, state machine, permissions, NFRs | [`spec.md`](./spec.md) |
+| Data model, rules, state machine, permissions, screens, NFRs | [`spec.md`](./spec.md) |
 | How a flow must behave for a user, offline included | [`user-flows.md`](./user-flows.md) |
+| Every state machine and its guards | [`state-machines.md`](./state-machines.md) |
 | Why a design decision exists (`D-xx`) | [`market-research.md`](./market-research.md) |
 | Sync internals | [`offline-sync.md`](./offline-sync.md) |
 | Entity overview (companion to `spec.md` §5) | [`domain-model.md`](./domain-model.md) |
-| Phase 0 record (superseded by `plan.md`) | [`implementation-plan.md`](./implementation-plan.md) |
+| Phase-level plan and architecture diagram | [`implementation-plan.md`](./implementation-plan.md) |
+| What is simulated, and production hardening | [`security-notes.md`](./security-notes.md) |
+| How to add a backend without a rewrite | [`future-backend.md`](./future-backend.md) |
 | Deployment | [`deploy-netlify.md`](./deploy-netlify.md) |
 
-Precedence when documents disagree: `spec.md` for rules and data → `user-flows.md` for user-facing behaviour → `plan.md` for sequencing. Fix the loser in the same PR.
+Precedence when documents disagree: `product-brief.md` states the requirement → `spec.md` states how it is met → `user-flows.md` for user-facing behaviour → `plan.md` for sequencing. Fix the loser in the same PR. Requirement-to-doc traceability for the whole brief is `spec.md` §21.
 
 ---
 
@@ -40,8 +44,10 @@ c9fc85d  Initial commit
 Verified on 28 July 2026:
 
 ```
-npm ci      → clean install, exit 0
-npm test    → 1 file, 2 tests passed (vitest 4.1.10, ~1s)
+npm ci              → clean install, exit 0
+npm run typecheck   → exit 0
+npm test            → 1 file, 2 tests passed (vitest 4.1.10, ~1s)
+npm run test:coverage → 76% statements / 52% branches (scaffold only)
 ```
 
 ### What exists (~950 lines of source)
@@ -72,9 +78,12 @@ Authentication, roles or guards · any domain entity table · any business logic
 ### Known gaps to fix as you pass through
 
 1. `vite.config.ts` has no coverage thresholds — add them with P1-02 (`spec.md` §10 requires 100% branch coverage on domain).
-2. There is no CI job running `lint`/`test` on pull requests; only the Netlify deploy workflow exists. Worth adding in Phase 1.
-3. `tsconfig.app.json` should have `noUncheckedIndexedAccess` verified before P1-01 lands (`spec.md` §2).
-4. `NoopSyncTransport` reports success for everything, so the outbox always drains. Keep it, but the sync console (P9-03) must state plainly that the transport is simulated.
+2. There is no CI job running `typecheck`/`lint`/`test` on pull requests; only the Netlify deploy workflow exists. **P1-10.**
+3. `tsconfig.app.json` does **not** set `noUncheckedIndexedAccess` — confirmed missing. `spec.md` §2 requires it; turn it on with P1-01 before there is much code to fix.
+4. `NoopSyncTransport` reports success for everything, so the outbox always drains. It is replaced in **P9-03** by `MockLoopbackTransport` and `DisabledTransport` (brief §7); until then, never read a drained outbox as evidence that sync works.
+5. `SyncOutboxEntry` in `src/types/base.ts` is missing `nextAttemptAt` and `dependencyOperationIds`, and its status union lacks `conflict` and `cancelled`. `spec.md` §5.24 is the target shape — extend it in P1-01 so later phases do not migrate again.
+6. `dashboard-page.tsx` and `air-freight-page.tsx` are marketing-style pages, which brief §12 explicitly forbids ("this is an operational ERP, not a marketing website"). They are replaced in P1-07.
+7. `npm run typecheck` and `npm run test:coverage` were added in this docs pass — the brief requires all eight scripts (`spec.md` §20) and all eight now work.
 
 ---
 
@@ -144,7 +153,8 @@ Never squash a whole phase into one commit.
 - [ ] No IndexedDB access outside `db/`/`repositories/`
 - [ ] No business rule added to a component
 - [ ] New simulated surface registered in `spec.md` §12 with a badge
-- [ ] Keyboard-operable, labelled, visible focus
+- [ ] Keyboard-operable, labelled, visible focus; status never conveyed by colour alone
+- [ ] Loading, empty and error states present for any new screen
 - [ ] Docs updated if behaviour diverged from them
 - [ ] PR names the task ID (e.g. `P3-04`)
 
@@ -152,12 +162,16 @@ Never squash a whole phase into one commit.
 
 ## 5. Commands
 
+All eight scripts required by the brief exist and work:
+
 ```bash
 npm ci                # install (lockfile is committed and must stay in sync)
 npm run dev           # dev server, PWA service worker enabled in dev
+npm run typecheck     # tsc -b --noEmit
+npm run lint          # oxlint
 npm test              # vitest run
 npm run test:watch    # vitest watch
-npm run lint          # oxlint
+npm run test:coverage # vitest run --coverage
 npm run build         # tsc -b && vite build
 npm run preview       # serve dist — use this to test true offline behaviour
 ```
@@ -172,7 +186,7 @@ npm run preview       # serve dist — use this to test true offline behaviour
 2. **Dev service worker is enabled** (`devOptions.enabled: true`). A stale SW can serve old assets during development — hard-reload or unregister when a change seems not to apply.
 3. **`fake-indexeddb` needs a fresh DB per test.** Delete and reopen between tests or state leaks across cases.
 4. **Blob storage in IndexedDB counts against the origin quota.** Check quota before writing a document; surface a real error rather than failing silently (see `plan.md` §12).
-5. **Offline number allocation must be device-prefixed.** Two offline devices allocating `INV-000001` is a data-integrity bug, not a cosmetic one.
+5. **Offline number allocation uses per-device sequence blocks** (`spec.md` §8), not a device segment in the number — shipment numbers must read `EX/BLR/24/000123`. Two offline devices minting the same invoice number is a data-integrity bug, not a cosmetic one.
 6. **Tailwind 4** is configured through the Vite plugin — there is no `tailwind.config.js`. Theme extensions go in CSS via `@theme`.
 7. **The Netlify workflow deploys `main`.** Merging to `main` publishes. Feature work stays on the branch above.
 
@@ -180,7 +194,7 @@ npm run preview       # serve dist — use this to test true offline behaviour
 
 ## 7. Definition of done for the MVP
 
-The MVP is complete when a reviewer can, on a single device with the network disabled after first load:
+The formal bar is the **30 acceptance criteria in [`spec.md`](./spec.md) §20**, verified by the procedure in [`plan.md`](./plan.md) §14. In practical terms, the MVP is complete when a reviewer can, on a single device with the network disabled after first load:
 
 1. Log in as each seeded role and land on a meaningful Workboard.
 2. Take an inquiry through quotation, margin approval and booking.
