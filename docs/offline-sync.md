@@ -65,6 +65,21 @@ When `baseVersion` ≠ server version:
 - API calls are not cached in MVP (no backend)
 - Service worker enables install and offline load of bundled JS/CSS/HTML
 
+## Queued ≠ effective
+
+A queued operation has changed local state, not the world. Any action whose real-world effect requires
+transmission — customs filings (`F15`, `F18`), carrier bookings against a real marketplace, outbound
+email/SMS/push — must show that it is **queued and not yet effective**. Customs filings carry legal
+deadlines; the UI must never imply a queued filing has been lodged. See
+[`user-flows.md`](./user-flows.md) §4 for the per-flow offline capability matrix and `F24` for the
+sync, conflict and device-trust flows.
+
+## Offline number allocation
+
+Sequences are device-prefixed (`PREFIX-{DEVICE}-{YY}{SEQ}`, `spec.md` §8) and allocated inside the same
+transaction as the entity. Two offline devices must never allocate the same invoice or shipment number;
+duplicates are additionally detected at the repository on sync.
+
 ## Security note (MVP)
 
 Demo authentication only. Sync transport will use real tokens when a backend exists; secrets are not stored in the outbox payload in production.

@@ -1,6 +1,11 @@
-# ASTRA Implementation Plan
+# ASTRA Implementation Plan (superseded)
 
-## Phase 0 — Scaffold (current)
+> **Superseded by [`plan.md`](./plan.md).** This file is retained as the Phase 0 record only.
+> The current schedule — task IDs, dependencies, exit criteria and parallelisation — lives in
+> [`plan.md`](./plan.md); flows are in [`user-flows.md`](./user-flows.md) and rules in
+> [`spec.md`](./spec.md). Do not plan work from this file.
+
+## Phase 0 — Scaffold (complete, commit `4577e05`)
 
 Deliver a runnable offline-first PWA shell:
 

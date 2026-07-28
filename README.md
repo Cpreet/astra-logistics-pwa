@@ -24,7 +24,21 @@ This repository is under active development. The current milestone is a **scaffo
 - **Local database:** Dexie / IndexedDB (`src/db`)
 - **Repositories:** `src/repositories` (UI must not call IndexedDB directly)
 - **Sync:** Outbox + `SyncEngine` with pluggable transport (`src/sync`)
-- **Docs:** `docs/implementation-plan.md`, `docs/domain-model.md`, `docs/offline-sync.md`
+- **Docs:** see [`docs/`](docs/README.md)
+
+## Documentation
+
+Start with [`docs/handoff.md`](docs/handoff.md) — verified current state, next tasks, and the working agreement.
+
+| Document | Contents |
+|----------|----------|
+| [docs/handoff.md](docs/handoff.md) | Current state, next tasks, conventions, PR checklist |
+| [docs/plan.md](docs/plan.md) | Phased delivery schedule (task IDs `P1-01`–`P9-06`) |
+| [docs/spec.md](docs/spec.md) | Canonical spec: architecture, domain model, state machine, permissions, NFRs |
+| [docs/user-flows.md](docs/user-flows.md) | End-to-end flows `F1`–`F24`, role workboards, offline matrix |
+| [docs/market-research.md](docs/market-research.md) | 2026 market research and design decisions `D-01`–`D-30` |
+| [docs/domain-model.md](docs/domain-model.md) | Entity overview |
+| [docs/offline-sync.md](docs/offline-sync.md) | Sync engine and conflict handling |
 
 ## Offline-first behaviour
 
