@@ -2,7 +2,7 @@
 
 **Read this first.** It states exactly where the project is, what has been verified, what to do next, and the rules every agent works under.
 
-- **Last verified:** 28 July 2026 — P1-01 (schema v3) and P1-02 (money) merged to `main`
+- **Last verified:** 28 July 2026 — P1-01 (schema v3), P1-02 (money) merged; UI density pass + error boundaries on the working branch
 - **Branch convention (this environment):** `cursor/<task>-1b46` off `main` — one task ID per PR
 - **Phase:** 0 complete · Phase 1 **partly** complete (auth, shell, permissions, write path, seed, **schema v3**, **money**) · Phase 2 started (customers, inquiries)
 
@@ -49,8 +49,9 @@ Verified on 28 July 2026 after merging `d8bf819`:
 npm ci              → clean install, exit 0
 npm run typecheck   → exit 0
 npm run lint        → exit 0 (3 fast-refresh warnings in context files)
-npm test            → 5 files, 16 tests passed
-npm run build       → 15 precache entries, 889 KiB
+npm test            → 8 files, 51 tests passed
+npm run build       → succeeds; no console errors in a headless Chromium pass
+                      at 1440×900 and 390×844, no horizontal page overflow
 ```
 
 ### What exists
@@ -67,10 +68,11 @@ npm run build       → 15 precache entries, 889 KiB
 | Services | `audit-service`, `notification-service`, `activation-service` | |
 | Pages | dashboard, customers (list/detail/form), inquiries (list/detail/form), sync, air-freight, welcome | Real workflows, not placeholders |
 | Shell | `app-header`, `app-sidebar`, `mobile-bottom-nav`, `mobile-tab-bar`, `nav-items`, `user-menu`, `quick-create-sheet` | Collapsible sidebar + mobile bottom nav |
-| UI kit | badge, button, card, empty-state, field, kbd, progress, segmented, sheet, skeleton, status-badge, timeline, toast | Light and dark themes via semantic tokens |
+| UI kit | badge, button, card, **data-table**, empty-state, field, kbd, progress, segmented, sheet, skeleton, **stat-strip**, status-badge, timeline, toast, **toolbar** | Light and dark themes via semantic tokens |
+| Resilience | `components/layout/error-boundary.tsx` | `AppErrorBoundary` on the tree, `RouteErrorBoundary` on routes; local-only diagnostics |
 | Extras | `command-palette`, `use-app-shortcuts`, `theme-context` | ⌘K palette, `g d`/`g i`/`g c`/`g a`/`g s`, `n` |
 | Sync | `sync-engine.ts`, `sync-transport.ts`, `/sync` page | Outbox drain + queue viewer; `NoopSyncTransport` only |
-| Tests | 7 files, ~44 tests | bootstrap, attention, activation, inquiry-workflow, permissions, **money (100% branch)**, **schema-v3-migration** |
+| Tests | 8 files, 51 tests | bootstrap, attention, activation, inquiry-workflow, permissions, **money (100% branch)**, schema-v3-migration, **data-table** |
 
 **The attention queue on the dashboard is the Workboard concept from `user-flows.md` §2** — already built, severity-ranked, with the action attached. Extend it rather than starting again.
 
@@ -97,7 +99,8 @@ The code landed first and is authoritative on naming. Fix the *spec* to match, n
 4. `NoopSyncTransport` reports success for everything, so the outbox always drains. Replaced in **P9-03** by `MockLoopbackTransport` and `DisabledTransport` (brief §7). Never read a drained outbox as evidence that sync works.
 5. `SyncOutboxEntry` now has `nextAttemptAt` / `dependencyOperationIds` and `conflict`/`cancelled` statuses (P1-01); backoff and dependency ordering still land in **P9-01**.
 6. `persistEntity` has no `persistDelete` and does not re-validate with Zod — both required by `spec.md` §3.2 and §7. **P1-03.**
-7. Three `only-export-components` lint warnings in `auth-context`, `theme-context` and `command-palette` — harmless, but they will hide a real warning eventually.
+7. `only-export-components` lint warnings in the context files — harmless, but they will hide a real warning eventually.
+8. **`Customer.creditLimit` is a plain major-unit number**, but `spec.md` §5.1 requires minor units like every other monetary field. `src/domain/money` now exists, so convert it before invoices are built — the cost only grows. Affects the type, seed, customer form and detail view.
 
 ## 3. Start here
 

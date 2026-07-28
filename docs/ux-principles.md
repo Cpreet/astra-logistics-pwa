@@ -80,3 +80,35 @@ The checklist tracks four real outcomes: add a customer, capture an inquiry, adv
 - Myplanet — Logistics dashboard case study (progressive disclosure findings)
 - Phenomenon Studio — Prioritizing UX in logistics products (role-based needs)
 - Codivox, DesignRevision, Dot2shape, Masterly, UserOrbit — 2026 SaaS onboarding and empty-state guidance
+
+## 6. Operational density beats comfortable spacing
+
+A freight desk scans hundreds of rows a day. Card lists and centred narrow columns
+are comfortable for marketing pages and hostile to that job.
+
+**What ASTRA does**
+
+- **Full-width layout.** The shell fills the viewport up to 1600px instead of a centred
+  `max-w-5xl` column, which was leaving roughly 40% of a 1440px screen empty.
+- **Real tables.** `src/components/ui/data-table.tsx` renders aligned, sortable columns
+  with compact rows, tabular numerals on codes, weights, money and dates, and
+  right-aligned numeric columns. Lists of records are tables, not stacks of cards.
+  Columns declare `hideBelow` so narrow screens drop detail instead of wrapping into
+  unreadable blocks, and the table scrolls inside its own container so the page body
+  never scrolls sideways.
+- **Row click is a convenience, not the mechanism.** Each row's first cell contains a
+  real link, so keyboard and screen-reader users navigate normally and the row never
+  becomes a tab trap. `aria-sort` reflects the active sort.
+- **One KPI strip, not a grid of cards.** `StatStrip` puts the numbers in a single
+  bordered band above the fold, so the dashboard opens on figures and exceptions
+  rather than on a greeting.
+- **Onboarding sits beside the work, not on top of it.** The activation checklist moved
+  to the dashboard's secondary column; the attention queue and the numbers come first.
+
+## 7. Failures degrade, they do not blank
+
+`AppErrorBoundary` wraps the tree and `RouteErrorBoundary` handles route failures, so a
+render error shows a recoverable screen instead of a white page. Both state plainly that
+local data — including work queued for sync — is untouched, because on an offline-first
+device that is the user's first question. Diagnostics are logged locally only, never
+including document contents (`security-notes.md` §2).

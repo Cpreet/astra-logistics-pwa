@@ -133,6 +133,8 @@ export async function runSeedIfNeeded(): Promise<void> {
   await db.inquiries.update(idle.id, { updatedAt: isoDaysFromNow(-5) })
   await db.inquiries.update(imminent.id, { updatedAt: isoDaysFromNow(-1) })
 
+  await backdateSeedAuditTrail()
+
   await db.appSettings.put({
     key: SEED_VERSION_KEY,
     value: CURRENT_SEED_VERSION,
@@ -143,7 +145,26 @@ export async function runSeedIfNeeded(): Promise<void> {
 function isoDaysFromNow(days: number): string {
   const date = new Date()
   date.setDate(date.getDate() + days)
-  return days === 0 ? date.toISOString() : date.toISOString()
+  return date.toISOString()
+}
+
+/**
+ * Seeding writes its audit entries in one burst, so the activity feed would
+ * otherwise show six identical "1 second ago" rows — which reads as fake data
+ * rather than a workspace with history. Spread them over the preceding days,
+ * oldest first, matching the order they were created in.
+ */
+async function backdateSeedAuditTrail(): Promise<void> {
+  const entries = await db.auditLogs.orderBy('createdAt').toArray()
+  const spacingMinutes = [7 * 24 * 60, 5 * 24 * 60, 3 * 24 * 60, 26 * 60, 5 * 60, 90]
+
+  await Promise.all(
+    entries.map((entry, index) => {
+      const minutesAgo = spacingMinutes[Math.min(index, spacingMinutes.length - 1)] ?? 60
+      const at = new Date(Date.now() - minutesAgo * 60_000).toISOString()
+      return db.auditLogs.update(entry.id, { createdAt: at })
+    }),
+  )
 }
 
 /** Clears operational demo records so a user can start from an empty workspace. */

@@ -15,8 +15,10 @@ function ShellBody() {
       <div className="flex min-w-0 flex-1 flex-col">
         <OfflineBanner />
         <AppHeader />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-28 md:px-6 md:py-7 md:pb-10">
-          <Outlet />
+        <main className="w-full flex-1 px-4 py-5 pb-28 md:px-6 md:py-6 md:pb-8">
+          <div className="mx-auto w-full max-w-[1600px]">
+            <Outlet />
+          </div>
         </main>
       </div>
       <MobileTabBar />
