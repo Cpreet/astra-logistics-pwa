@@ -37,6 +37,14 @@ This repository is under active development. The current milestone is a **scaffo
 
 Production authentication is **not** implemented. A future phase will add **demo authentication** with seeded users and role-based guards, clearly labelled as non-production in this README.
 
+## Deploy (Netlify + GitHub)
+
+1. In [Netlify](https://app.netlify.com/), choose **Add new site** → **Import an existing project** → **GitHub** → `Cpreet/astra-logistics-pwa`.
+2. Confirm build settings from `netlify.toml` (build: `npm run build`, publish: `dist`, Node 20).
+3. Deploy; production updates on every push to `main`.
+
+Optional GitHub Actions deploy (requires `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` repository secrets): see [docs/deploy-netlify.md](docs/deploy-netlify.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
