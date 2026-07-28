@@ -13,6 +13,8 @@ import {
   SyncStatusBadge,
 } from '@/components/ui/status-badge'
 import { useToast } from '@/components/ui/toast'
+import { AuditTrail } from '@/features/audit/audit-trail'
+import { auditKeys } from '@/features/audit/audit-keys'
 import { useAuth } from '@/features/auth/auth-context'
 import { customerKeys } from '@/hooks/use-customers'
 import { useInquiries } from '@/hooks/use-inquiries'
@@ -53,6 +55,7 @@ export function CustomerDetailPage() {
     onSuccess: async (updated) => {
       await queryClient.invalidateQueries({ queryKey: customerKeys.detail(id) })
       await queryClient.invalidateQueries({ queryKey: customerKeys.all })
+      await queryClient.invalidateQueries({ queryKey: auditKeys.all })
       await queryClient.invalidateQueries({ queryKey: outboxKey })
       notify({ tone: 'success', message: `Status set to ${updated.status.replaceAll('_', ' ')}` })
     },
@@ -238,6 +241,8 @@ export function CustomerDetailPage() {
           </div>
         </section>
       ) : null}
+
+      <AuditTrail entityId={customer.id} />
     </div>
   )
 }
