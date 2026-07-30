@@ -86,7 +86,7 @@ describe('Dexie schema v3 migration (P1-01)', () => {
 
     const v3 = new AstraDatabase(dbName)
     await v3.open()
-    expect(v3.verno).toBe(3)
+    expect(v3.verno).toBeGreaterThanOrEqual(3)
 
     const customer = await v3.customers.get('cust-migrate-1')
     const inquiry = await v3.inquiries.get('inq-migrate-1')
@@ -111,17 +111,22 @@ describe('Dexie schema v3 migration (P1-01)', () => {
     })
     expect(await v3.numberSequences.count()).toBe(1)
 
+    // Schema v4 inquiry messages table is present after upgrade.
+    expect(v3.table('inquiryMessages')).toBeTruthy()
+    expect(await v3.inquiryMessages.count()).toBe(0)
+
     await v3.close()
   })
 
-  it('opens the default database at schema v3 after bootstrap', async () => {
+  it('opens the default database at the latest schema after bootstrap', async () => {
     await dbDeleteDefault()
     const { db } = await import('@/db/astra-db')
     await db.open()
-    expect(db.verno).toBe(3)
+    expect(db.verno).toBeGreaterThanOrEqual(4)
     await bootstrapLocalDatabase()
     expect(await db.customers.count()).toBeGreaterThanOrEqual(2)
     expect(await db.quotations.count()).toBe(0)
+    expect(await db.inquiryMessages.count()).toBeGreaterThan(0)
     expect(V3_NEW_TABLE_NAMES).toHaveLength(31)
   })
 })

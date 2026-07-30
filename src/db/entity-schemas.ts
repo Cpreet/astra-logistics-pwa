@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { CUSTOMER_STATUSES, CUSTOMER_TYPES } from '@/types/customer'
+import {
+  INQUIRY_MESSAGE_CHANNELS,
+  INQUIRY_MESSAGE_DIRECTIONS,
+  INQUIRY_MESSAGE_STATUSES,
+} from '@/types/inquiry-message'
 import { INQUIRY_STATUSES, TRADE_DIRECTIONS, TRANSPORT_MODES } from '@/types/inquiry'
 import { SYNC_STATUSES } from '@/types/base'
 
@@ -82,6 +87,22 @@ const inquirySchema = baseEntitySchema.extend({
   status: z.enum(INQUIRY_STATUSES),
 })
 
+const inquiryMessageSchema = baseEntitySchema.extend({
+  inquiryId: z.string().min(1),
+  customerId: z.string().min(1),
+  channel: z.enum(INQUIRY_MESSAGE_CHANNELS),
+  direction: z.enum(INQUIRY_MESSAGE_DIRECTIONS),
+  status: z.enum(INQUIRY_MESSAGE_STATUSES),
+  subject: z.string().nullish(),
+  body: z.string().min(1),
+  toAddress: z.string().min(1),
+  fromAddress: z.string().nullish(),
+  contactName: z.string().nullish(),
+  sentAt: z.string().nullish(),
+  templateId: z.string().nullish(),
+  simulated: z.literal(true),
+})
+
 /**
  * Registry keyed by the `entityType` passed to the persist helpers. Entity
  * types without a schema yet are written unvalidated — add the schema when the
@@ -91,6 +112,7 @@ export const ENTITY_SCHEMAS: Record<string, z.ZodTypeAny> = {
   customer: customerSchema,
   customer_contact: customerContactSchema,
   inquiry: inquirySchema,
+  inquiry_message: inquiryMessageSchema,
 }
 
 export class EntityValidationError extends Error {

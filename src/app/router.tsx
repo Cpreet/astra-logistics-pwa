@@ -9,6 +9,7 @@ import { CustomerDetailPage } from '@/pages/customers/customer-detail-page'
 import { CustomerFormPage } from '@/pages/customers/customer-form-page'
 import { CustomersPage } from '@/pages/customers/customers-page'
 import { DashboardPage } from '@/pages/dashboard-page'
+import { InquiryCommunicationsPage } from '@/pages/inquiries/inquiry-communications-page'
 import { InquiryDetailPage } from '@/pages/inquiries/inquiry-detail-page'
 import { InquiryFormPage } from '@/pages/inquiries/inquiry-form-page'
 import { InquiriesPage } from '@/pages/inquiries/inquiries-page'
@@ -72,6 +73,14 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission permission="inquiries.read">
                 <InquiryDetailPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: 'inquiries/:id/communications',
+            element: (
+              <RequirePermission permission="inquiries.read">
+                <InquiryCommunicationsPage />
               </RequirePermission>
             ),
           },

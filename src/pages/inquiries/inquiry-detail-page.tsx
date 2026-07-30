@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNowStrict } from 'date-fns'
-import { ArrowRight, Building2, CalendarClock, Package } from 'lucide-react'
+import { ArrowRight, Building2, CalendarClock, Mail, Package } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
-import { Button } from '@/components/ui/button'
+import { Button, buttonClasses } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { InquiryStatusBadge, SyncStatusBadge } from '@/components/ui/status-badge'
 import { Timeline, type TimelineStep } from '@/components/ui/timeline'
@@ -130,12 +130,21 @@ export function InquiryDetailPage() {
         backTo="/inquiries"
         backLabel="Inquiries"
         actions={
-          can('inquiries.write') && next ? (
-            <Button loading={transition.isPending} onClick={() => transition.mutate(next.to)}>
-              {next.label}
-              <ArrowRight className="size-4" aria-hidden />
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={`/inquiries/${inquiry.id}/communications`}
+              className={buttonClasses('secondary', 'md')}
+            >
+              <Mail className="size-4" aria-hidden />
+              Communications
+            </Link>
+            {can('inquiries.write') && next ? (
+              <Button loading={transition.isPending} onClick={() => transition.mutate(next.to)}>
+                {next.label}
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
