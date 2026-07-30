@@ -34,7 +34,7 @@ Seeded roles include Sales, Operations, Pricing, Documentation, Compliance, Ware
 
 - **Dashboard** — an exception-first “Needs attention” queue (stalled pricing, imminent or missed pickups, credit holds, compliance reviews, failed syncs), each with a direct action
 - **Customers** — list, search, filters, detail view, status changes, and a four-field create form
-- **Inquiries** — list, search, status filters, detail view with a colour-coded workflow timeline, and validated state transitions
+- **Inquiries** — list, search, status filters, detail view with a colour-coded workflow timeline, validated state transitions, and a **Communications** subpage for email/WhatsApp drafting and trails (simulated delivery)
 - **Command palette** — `⌘K` / `Ctrl+K` (or `/`) to search records and run commands
 - **Keyboard shortcuts** — `g d`, `g i`, `g c`, `g a`, `g s` to navigate; `n` for a new inquiry
 - **Sync activity** — the local operation queue with status, plus a manual push

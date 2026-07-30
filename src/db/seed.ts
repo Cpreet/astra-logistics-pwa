@@ -1,5 +1,10 @@
 import { db } from '@/db/astra-db'
 import { createCustomer } from '@/repositories/customer-repository'
+import {
+  createInquiryMessage,
+  recordInboundInquiryMessage,
+  sendInquiryMessage,
+} from '@/repositories/inquiry-message-repository'
 import { createInquiry } from '@/repositories/inquiry-repository'
 import { upsertUser } from '@/repositories/user-repository'
 import type { User } from '@/types/user'
@@ -29,6 +34,7 @@ const DEMO_USERS: User[] = [
 export async function runSeedIfNeeded(): Promise<void> {
   const existing = await db.appSettings.get(SEED_VERSION_KEY)
   if (existing?.value === CURRENT_SEED_VERSION) {
+    await seedInquiryMessagesIfEmpty()
     return
   }
 
@@ -133,6 +139,7 @@ export async function runSeedIfNeeded(): Promise<void> {
   await db.inquiries.update(idle.id, { updatedAt: isoDaysFromNow(-5) })
   await db.inquiries.update(imminent.id, { updatedAt: isoDaysFromNow(-1) })
 
+  await seedInquiryMessagesIfEmpty()
   await backdateSeedAuditTrail()
 
   await db.appSettings.put({
@@ -140,6 +147,60 @@ export async function runSeedIfNeeded(): Promise<void> {
     value: CURRENT_SEED_VERSION,
     updatedAt: nowUtcIso(),
   })
+}
+
+/**
+ * Seeds a short email + WhatsApp trail against the first inquiry when empty,
+ * including for workspaces that already completed the v2 customer/inquiry seed.
+ */
+async function seedInquiryMessagesIfEmpty(): Promise<void> {
+  const existing = await db.inquiryMessages.count()
+  if (existing > 0) return
+
+  const inquiries = await db.inquiries.filter((row) => !row.deletedAt).toArray()
+  const inquiry = inquiries.sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
+  if (!inquiry) return
+
+  const contact = await db.customerContacts.where('customerId').equals(inquiry.customerId).first()
+  const salesUserId = inquiry.assignedSalesUserId
+  const toEmail = contact?.email ?? 'contact@customer.demo'
+  const toPhone = contact?.phone ?? '+44 7700 900123'
+  const contactName = contact?.name ?? 'Customer contact'
+
+  const ack = await createInquiryMessage(salesUserId, {
+    inquiryId: inquiry.id,
+    customerId: inquiry.customerId,
+    channel: 'email',
+    subject: `Re: ${inquiry.inquiryNumber} — ${inquiry.origin.code} → ${inquiry.destination.code}`,
+    body: `Thank you for inquiry ${inquiry.inquiryNumber}. We are preparing rates for ${inquiry.origin.code} → ${inquiry.destination.code}.`,
+    toAddress: toEmail,
+    contactName,
+    templateId: 'email-ack',
+    asDraft: false,
+  })
+  await sendInquiryMessage(salesUserId, ack.id)
+
+  await recordInboundInquiryMessage(salesUserId, {
+    inquiryId: inquiry.id,
+    customerId: inquiry.customerId,
+    channel: 'email',
+    subject: `Re: ${inquiry.inquiryNumber}`,
+    body: 'Thanks — please include a weekend arrival option if available.',
+    fromAddress: toEmail,
+    contactName,
+  })
+
+  const wa = await createInquiryMessage(salesUserId, {
+    inquiryId: inquiry.id,
+    customerId: inquiry.customerId,
+    channel: 'whatsapp',
+    body: `Hi — received ${inquiry.inquiryNumber} for ${inquiry.origin.code}→${inquiry.destination.code}. Working on rates.`,
+    toAddress: toPhone,
+    contactName,
+    templateId: 'wa-ack',
+    asDraft: false,
+  })
+  await sendInquiryMessage(salesUserId, wa.id)
 }
 
 function isoDaysFromNow(days: number): string {
@@ -172,6 +233,7 @@ export async function clearDemoData(): Promise<void> {
   await db.customers.clear()
   await db.customerContacts.clear()
   await db.inquiries.clear()
+  await db.inquiryMessages.clear()
   await db.auditLogs.clear()
   await db.notifications.clear()
   await db.syncOutbox.clear()

@@ -19,6 +19,7 @@ import type {
 import type { Charge, Invoice, Payment } from '@/types/finance'
 import type { Incident } from '@/types/incident'
 import type { Inquiry } from '@/types/inquiry'
+import type { InquiryMessage } from '@/types/inquiry-message'
 import type { Notification } from '@/types/notification'
 import type { Quotation, QuotationLine } from '@/types/quotation'
 import type {
@@ -106,6 +107,13 @@ const V3_STORES = {
   numberSequences: 'id, sequenceKey, year',
 } as const
 
+/** Inquiry email / WhatsApp drafts and trails (simulated delivery). */
+const V4_STORES = {
+  ...V3_STORES,
+  inquiryMessages:
+    'id, inquiryId, customerId, channel, status, direction, [inquiryId+createdAt], syncStatus, deletedAt, updatedAt',
+} as const
+
 export class AstraDatabase extends Dexie {
   syncOutbox!: Table<SyncOutboxEntry, string>
   syncMetadata!: Table<SyncMetadata, string>
@@ -147,6 +155,7 @@ export class AstraDatabase extends Dexie {
   exceptionRoutingRules!: Table<ExceptionRoutingRule, string>
   syncConflicts!: Table<SyncConflict, string>
   numberSequences!: Table<NumberSequence, string>
+  inquiryMessages!: Table<InquiryMessage, string>
 
   constructor(name = 'astra') {
     super(name)
@@ -154,6 +163,7 @@ export class AstraDatabase extends Dexie {
     this.version(1).stores(V1_STORES)
     this.version(2).stores(V2_STORES)
     this.version(3).stores(V3_STORES)
+    this.version(4).stores(V4_STORES)
   }
 }
 
