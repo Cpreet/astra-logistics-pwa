@@ -15,7 +15,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/auth-context'
 import { listActiveUsers } from '@/repositories/user-repository'
@@ -154,7 +154,11 @@ export function WelcomePage() {
           </dl>
           <p className="mt-6 flex items-start gap-2 text-xs text-faint">
             <WifiOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            Demo authentication only — no passwords, and your data stays in this browser.
+            Demo authentication only — no passwords on this screen, or use{' '}
+            <Link to="/login" className="font-medium text-brand hover:underline">
+              email sign-in
+            </Link>
+            .
           </p>
         </header>
 

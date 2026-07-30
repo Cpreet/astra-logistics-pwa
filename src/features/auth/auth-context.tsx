@@ -8,8 +8,9 @@ import {
   type ReactNode,
 } from 'react'
 import { clearDemoSession, loadDemoSession, saveDemoSession } from '@/db/seed'
+import { normalizeLoginEmail, validateDemoLogin } from '@/domain/demo-auth'
 import { hasPermission, type Permission } from '@/domain/permissions'
-import { getUserById, upsertUser } from '@/repositories/user-repository'
+import { getUserByEmail, getUserById, upsertUser } from '@/repositories/user-repository'
 import type { User } from '@/types/user'
 import { nowUtcIso } from '@/utils/time'
 
@@ -17,6 +18,7 @@ interface AuthContextValue {
   user: User | null
   loading: boolean
   signIn: (user: User) => Promise<void>
+  signInWithCredentials: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   can: (permission: Permission) => boolean
 }
@@ -57,6 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const signInWithCredentials = useCallback(async (email: string, password: string) => {
+    const normalized = normalizeLoginEmail(email)
+    const found = await getUserByEmail(normalized)
+    const error = validateDemoLogin(password, found)
+    if (error) {
+      throw new Error(error.message)
+    }
+    await signIn(found!)
+  }, [signIn])
+
   const can = useCallback(
     (permission: Permission) => {
       if (!user) return false
@@ -70,10 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       signIn,
+      signInWithCredentials,
       signOut,
       can,
     }),
-    [user, loading, signIn, signOut, can],
+    [user, loading, signIn, signInWithCredentials, signOut, can],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

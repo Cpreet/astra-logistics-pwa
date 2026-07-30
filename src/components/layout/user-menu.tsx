@@ -105,7 +105,7 @@ export function UserMenu() {
                 onClick={async () => {
                   setOpen(false)
                   await signOut()
-                  navigate('/welcome', { replace: true })
+                  navigate('/login', { replace: true })
                 }}
               >
                 <LogOut className="size-4 text-faint" aria-hidden />

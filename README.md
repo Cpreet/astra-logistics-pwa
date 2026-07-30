@@ -24,7 +24,7 @@ Air freight is implemented first; the domain model already covers sea, road, rai
 
 ## Getting started in one tap
 
-Open the app and you land on `/welcome`, which asks a single question — “What do you do?”. Choosing a role signs you in immediately with a working, pre-populated workspace. There is no password, profile step, or setup wizard.
+Open the app and sign in at `/login` with a seeded demo account (password `astra` for every user), or use `/welcome` to pick a role in one tap. There is no production identity provider — sessions live in IndexedDB on this device.
 
 Seeded roles include Sales, Operations, Pricing, Documentation, Compliance, Warehouse, Finance, Manager, Administrator, and a read-only Customer portal.
 

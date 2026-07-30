@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/components/layout/error-boundary'
 import { RequireAuth } from '@/features/auth/require-auth'
 import { RequirePermission } from '@/features/auth/require-permission'
+import { LoginPage } from '@/features/auth/login-page'
 import { WelcomePage } from '@/features/onboarding/welcome-page'
 import { AppShell } from '@/layouts/app-shell'
 import { AirFreightPage } from '@/pages/air-freight-page'
@@ -17,7 +18,7 @@ import { SyncPage } from '@/pages/sync-page'
 
 export const router = createBrowserRouter([
   { path: '/welcome', element: <WelcomePage />, errorElement: <RouteErrorBoundary /> },
-  { path: '/login', element: <Navigate to="/welcome" replace /> },
+  { path: '/login', element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
   {
     element: <RequireAuth />,
     errorElement: <RouteErrorBoundary />,
