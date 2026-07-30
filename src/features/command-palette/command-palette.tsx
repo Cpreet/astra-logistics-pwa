@@ -188,7 +188,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
         run: async () => {
           await signOut()
           onClose()
-          navigate('/welcome', { replace: true })
+          navigate('/login', { replace: true })
         },
       },
     )
