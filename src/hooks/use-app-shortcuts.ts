@@ -37,6 +37,7 @@ export function useAppShortcuts(): void {
           d: '/',
           c: '/customers',
           i: '/inquiries',
+          o: '/documents',
           a: '/modules/air',
           s: '/sync',
         }
