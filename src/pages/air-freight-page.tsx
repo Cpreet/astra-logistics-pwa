@@ -1,4 +1,4 @@
-import { ArrowRight, FileText, Package, Plane, Users } from 'lucide-react'
+import { ArrowRight, FileText, Package, Plane, Receipt, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardDescription, CardTitle, SectionHeading } from '@/components/ui/card'
@@ -8,6 +8,7 @@ import { useInquiries } from '@/hooks/use-inquiries'
 
 const ROADMAP = [
   { label: 'Inquiries', state: 'live' as const },
+  { label: 'Labels, waybills & invoices', state: 'live' as const },
   { label: 'Quotations & margin approval', state: 'next' as const },
   { label: 'Bookings', state: 'next' as const },
   { label: 'Shipment lifecycle & tracking', state: 'planned' as const },
@@ -32,6 +33,12 @@ export function AirFreightPage() {
       title: 'Customers',
       description: `${customers.length} account${customers.length === 1 ? '' : 's'}`,
       icon: Users,
+    },
+    {
+      to: '/documents',
+      title: 'Shipping documents',
+      description: 'Labels, waybills, GST invoices',
+      icon: Receipt,
     },
     {
       to: '/inquiries/new',

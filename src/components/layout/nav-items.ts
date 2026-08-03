@@ -1,4 +1,4 @@
-import { Database, FileText, LayoutDashboard, Plane, Users } from 'lucide-react'
+import { Database, FileText, LayoutDashboard, Plane, Receipt, Users } from 'lucide-react'
 import type { Permission } from '@/domain/permissions'
 
 export interface NavItem {
@@ -39,6 +39,14 @@ export const NAV_ITEMS: NavItem[] = [
     permission: 'customers.read',
     group: 'work',
     shortcut: 'G C',
+  },
+  {
+    to: '/documents',
+    label: 'Documents',
+    shortLabel: 'Docs',
+    icon: Receipt,
+    group: 'work',
+    shortcut: 'G O',
   },
   {
     to: '/modules/air',
